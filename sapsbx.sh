@@ -61,13 +61,13 @@ UUIDS=""
 # 选填！每个账号对应的应用程序名称APP空一格，不填则每个实例都自动生成，多个账号中有个别账号自动生成填no
 APP_NAMES=""
 
-# 选填！当使用Argo固定/临时隧道时，此端口变量必填，每个账号对应端口空一格，不填则每个实例都不启用argo，多个账号中有个别账号不启用填no
+# 选填！当使用Argo固定隧道时，此端口变量必填，每个账号对应端口空一格，不填则每个实例都不启用argo，多个账号中有个别账号不启用填no
 VMPTS="" 
 
-# 选填！Argo固定隧道域名，每个账号对应域名空一格，不填则每个实例都启用argo临时隧道，多个账号中有个别账号不启用填no
+# 选填！Argo固定隧道域名，每个账号对应域名空一格，启用Argo时必填，多个账号中有个别账号不启用填no
 AGNS="" 
 
-# 选填！Argo固定隧道token，每个账号对应token空一格，不填则每个实例都启用argo临时隧道，多个账号中有个别账号不启用填no
+# 选填！Argo固定隧道token，每个账号对应token空一格，启用Argo时必填，多个账号中有个别账号不启用填no
 AGKS=""
 
 # 8-9点保活时间间隔，单位：分钟
@@ -122,7 +122,7 @@ sapcfevn() {
     cf set-env "$APP_NAME" agn "$AGN"
     cf set-env "$APP_NAME" agk "$AGK"
     cf set-env "$APP_NAME" vmpt "$VMPT"
-    cf set-env "$APP_NAME" argo "y"
+    cf set-env "$APP_NAME" argo "vmpt"
   fi
   ROUTE=$(cf app "$APP_NAME" | grep "routes:" | awk '{print $2}')
   cf set-env "$APP_NAME" DOMAIN "$ROUTE"
@@ -156,6 +156,10 @@ for i in "${!CF_USERNAMES[@]}"; do
   [ "$VMPT" = "no" ] && VMPT=""
   [ "$AGN" = "no" ] && AGN=""
   [ "$AGK" = "no" ] && AGK=""
+  if [ -n "$VMPT" ] && { [ -z "$AGN" ] || [ -z "$AGK" ]; }; then
+    echo "Argo仅支持固定隧道：请填写对应的AGNS和AGKS" >&2
+    exit 1
+  fi
   case "$REGION" in
     SG) CF_API="https://api.cf.ap21.hana.ondemand.com"; serv="sg" ;;
     US) CF_API="https://api.cf.us10-001.hana.ondemand.com"; serv="us" ;;

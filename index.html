@@ -387,7 +387,7 @@
           </svg>
         </label>
       </div>
-      <h1>ArgoSBX小钢炮脚本💣一键SSH命令生成器 V26.7.16</h1>
+      <h1>ArgoSBX小钢炮脚本💣一键SSH命令生成器 V26.11.12-enhanced</h1>
       <p>
         甬哥Github项目：
         <a href="https://github.com/yonggekkk" target="_blank">github.com/yonggekkk</a><br>
@@ -511,17 +511,38 @@
       </section>
 
       <section class="card argo-tunnel">
-        <h2>Argo临时/固定隧道CDN：</h2>
+        <h2>Argo 固定隧道：</h2>
         <div class="row">
           <label>启用Argo隧道开关 <span class="pill">argo</span></label>
           <select id="argoSelect">
             <option value="">默认 关闭</option>
+            <option value="vxpt">VLESS-XHTTP-Argo-TLS-ENC（增强组合）</option>
             <option value="vwpt">启用主协议Vless-ws-enc的Argo隧道 </option>
             <option value="vmpt">启用主协议Vmess-ws的Argo隧道 </option>
           </select>
         </div>
-        <div class="row"><label>固定隧道CF域名 <span class="pill">agn</span></label><input id="agn" type="text" placeholder="Zero Trust已设置有子域名称的CF域名，留空则临时隧道" disabled></div>
-        <div class="row"><label>固定隧道Token <span class="pill">agk</span></label><input id="agk" type="text" placeholder="Zero Trust已提取ey开头的秘钥，留空则临时隧道" disabled></div>
+        <div class="row"><label>固定隧道CF域名 <span class="pill">agn</span></label><input id="agn" type="text" placeholder="必填，例如 tunnel.example.com" disabled></div>
+        <div class="row"><label>固定隧道Token <span class="pill">agk</span></label><input id="agk" type="password" placeholder="必填，仅填写固定隧道 Token" disabled></div>
+        <div class="row"><label>隧道传输协议</label><select id="agproto" disabled><option value="quic">QUIC / UDP</option><option value="http2">HTTP/2 / TCP</option><option value="auto">自动（可回退 HTTP/2）</option></select></div>
+        <p>仅支持固定隧道，不会回退到随机域名。Cloudflare 的服务地址须指向同机 XHTTP 端口。</p>
+        <div id="xhttp-options" hidden>
+          <h3>XHTTP 增强组合</h3>
+          <div class="row"><label>客户端 HTTP 版本</label><select id="xhttp_alpn"><option value="h2">HTTP/2</option><option value="h3">HTTP/3</option></select></div>
+          <div class="row"><label>上行模式</label><select id="xhttp_mode"><option value="packet-up">packet-up（默认）</option></select></div>
+          <div class="row"><label>随机路径</label><input id="xhttp_path" type="text" placeholder="留空自动生成；自定义如 /my-path" /></div>
+          <div class="row"><label>优选 IP / 地址</label><input id="xhttp_address" type="text" placeholder="留空使用固定隧道域名" /></div>
+          <div class="row"><label>XMUX 参数（JSON）</label><input id="xhttp_xmux" type="text" placeholder='{"maxConcurrency":"16-32","hMaxRequestTimes":"600-900"}' /></div>
+          <div class="row"><label>上行 FinalMask</label><select id="xhttp_finalmask"><option value="off">关闭</option><option value="tls-fragment">TLS 握手分片（仅 HTTP/2）</option></select></div>
+          <h3>上下行分离（可选）</h3>
+          <div class="row"><label>下行地址</label><input id="xhttp_download_address" type="text" placeholder="直连 IP 或另一 CDN 域名" /></div>
+          <div class="row"><label>下行端口</label><input id="xhttp_download_port" type="text" placeholder="默认 443" /></div>
+          <div class="row"><label>下行 TLS 域名</label><input id="xhttp_download_servername" type="text" placeholder="下行地址为 IP 时必填，须匹配证书" /></div>
+          <div class="row"><label>下行 HTTP Host</label><input id="xhttp_download_host" type="text" placeholder="默认与下行 TLS 域名相同" /></div>
+          <div class="row"><label>下行 HTTP 版本</label><select id="xhttp_download_alpn"><option value="h2">HTTP/2</option><option value="h3">HTTP/3</option></select></div>
+          <div class="row"><label>下行 FinalMask</label><select id="xhttp_download_finalmask"><option value="off">关闭</option><option value="tls-fragment">TLS 握手分片（仅 HTTP/2）</option></select></div>
+          <p>上下行必须抵达同一 XHTTP 入站，并使用相同路径。HTTP/3 与隧道 QUIC 分别配置。启用 FinalMask 后请导入生成的 xhttp-client.json。</p>
+        </div>
+        <p id="argo-error" role="alert" style="color:#e57373"></p>
       </section>
 
       <section class="card shortcut-commands-card">
@@ -551,7 +572,7 @@
           <button id="reset">重置</button>
           <button id="copy">复制</button>
         </div>
-        <p style="margin-top: 10px;">相关细节说明，请参考ArgoSBX小钢炮脚本项目💣：<a href="https://github.com/yonggekkk/argosbx" target="_blank">github.com/yonggekkk/argosbx</a></p>
+        <p style="margin-top: 10px;">相关细节说明，请参考ArgoSBX小钢炮脚本项目💣：<a href="https://github.com/mutsuki14/argosbx-enhanced" target="_blank">github.com/mutsuki14/argosbx-enhanced</a></p>
 Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)</a></p>
 1、ArgoSBX一键SSH命令生成器发布，只要点几下，各大代理协议任你选：<a href="https://youtu.be/4u6W4c-t3oU" target="_blank">点击视频教程</a></p>
 2、ArgoSBX内置15种WARP出站组合，轻松替代独立的WARP脚本：<a href="https://youtu.be/iywjT8fIka4" target="_blank">点击视频教程</a></p>
@@ -568,12 +589,13 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
     </div>
   </div>
 
+<script src="generator-enhanced.js"></script>
 <script>
 (function(){
-  const CURL = 'bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/argosbx/main/argosbx.sh)';
-  const WGET = 'bash <(wget -qO- https://raw.githubusercontent.com/yonggekkk/argosbx/main/argosbx.sh)';
+  const CURL = 'bash <(curl -Ls https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)';
+  const WGET = 'bash <(wget -qO- https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)';
   const protoKeys = ['sopt','vmpt','vlpt','xhpt','vxpt','vwpt','xupt','xcpt','hypt','tupt','nvpt','anpt','arpt','sspt'];
-  const optIds = ['warp','ippz','uuid','reym','cfip','alns','hyjpt','cdnym','name', 'oap', 'sub', 'subid', 'subpt'];
+  const optIds = ['agproto', ...ArgosbxEnhanced.xhttpFields, 'warp','ippz','uuid','reym','cfip','alns','hyjpt','cdnym','name', 'oap', 'sub', 'subid', 'subpt'];
 
   const argoSelect = document.getElementById('argoSelect');
   const agn = document.getElementById('agn');
@@ -602,7 +624,7 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
   const output = document.getElementById('output');
   const allInputs = document.querySelectorAll('input, select');
   const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-  const textInputs = document.querySelectorAll('input[type="text"]');
+  const textInputs = document.querySelectorAll('input[type="text"], input[type="password"]');
   const ippzSelect = document.getElementById('ippz');
   const oapSelect = document.getElementById('oap');
   const generateUuidBtn = document.getElementById('generateUuidBtn');
@@ -634,7 +656,7 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
       agn.value = '';
       agk.value = '';
     }
-    [agn, agk].forEach(i => i.disabled = !isEnabled);
+    [agn, agk, document.getElementById('agproto')].forEach(i => i.disabled = !isEnabled);
   }
 
   function updateSubState() {
@@ -669,10 +691,16 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
     updateSubState();
     argoSelect.value = '';
     updateArgoState('');
+    ['agproto', ...ArgosbxEnhanced.xhttpFields].forEach(id => { const el = document.getElementById(id); if (el.tagName === 'SELECT') el.selectedIndex = 0; });
     updateDynamicInputs();
   }
 
   function updateDynamicInputs() {
+      const enhanced = argoSelect.value === 'vxpt';
+      document.getElementById('xhttp-options').hidden = !enhanced;
+      ArgosbxEnhanced.xhttpFields.forEach(id => document.getElementById(id).disabled = !enhanced);
+      document.getElementById('agproto').disabled = argoSelect.value === '';
+
       const isCdnEnabled = vmessWsCheckbox.checked || vlessXhttpCheckbox.checked || vlessWsVCheckbox.checked;
       cdnymInput.disabled = !isCdnEnabled;
       if (!isCdnEnabled) cdnymInput.value = '';
@@ -709,7 +737,9 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
     const argoValue = argoSelect.value;
     const isEnabled = argoValue !== '';
     [agn, agk].forEach(i => i.disabled = !isEnabled);
-    if (argoValue === 'vwpt') {
+    if (argoValue === 'vxpt') {
+        vlessXhttpCheckbox.checked = true;
+    } else if (argoValue === 'vwpt') {
         vlessWsVCheckbox.checked = true;
     } else if (argoValue === 'vmpt') {
         vmessWsCheckbox.checked = true;
@@ -724,6 +754,10 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
 
   [vmessWsCheckbox, vlessWsVCheckbox, vlessXhttpCheckbox, vlessTcpRealityCheckbox, vlessXhttpRealityCheckbox, vlessXhttpTlsCheckbox, anyRealityCheckbox, hy2Checkbox].forEach(ck => {
     ck.addEventListener('change', () => {
+      if (!vlessXhttpCheckbox.checked && argoSelect.value === 'vxpt') {
+         argoSelect.value = '';
+         updateArgoState('');
+      }
       if (!vlessWsVCheckbox.checked && argoSelect.value === 'vwpt') { 
          argoSelect.value = '';
          updateArgoState('');
@@ -792,7 +826,8 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
     
     const argoValue = argoSelect.value;
     if (argoValue !== '') {
-      m['argo'] = argoValue; 
+      m['argo'] = argoValue;
+      if (argoValue === 'vxpt') m['xhttp_download_address'] = document.getElementById('xhttp_download_address').value.trim();
       const _agn = (agn.value || '').trim();
       const _agk = (agk.value || '').trim();
       if (!agn.disabled && _agn) m['agn'] = _agn;
@@ -812,19 +847,20 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
     if (keys.includes('oap')) ordered.push('oap');
     keys.forEach(k => { if (!ordered.includes(k)) ordered.push(k); });
 
-    return ordered.map(k => {
-      const val = m[k];
-      if (val === '') return `${k}=""`;
-      if (/[^\w\-\.:/]/.test(val)) {
-        return `${k}="${val.replace(/"/g, '\\"')}"`;
-      }
-      return `${k}="${val}"`;
-    }).join(' ');
+    return ordered.map(k => `${k}=${ArgosbxEnhanced.quote(m[k])}`).join(' ');
+  }
+
+  function formError(m) {
+    const error = ArgosbxEnhanced.validate(m);
+    document.getElementById('argo-error').textContent = error;
+    document.getElementById('copy').disabled = !!error;
+    return error;
   }
 
   function render(){
     if (isUpdatingFromOutput) return; 
     const m = collectVars();
+    if (formError(m)) { output.value = ''; return; }
     const vars = toBashVars(m);
     const selectedCommand = document.querySelector('input[name="commandType"]:checked').value === 'curl' ? CURL : WGET;
     output.value = (vars ? vars + ' ' : '') + selectedCommand;
@@ -842,14 +878,7 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
       document.querySelector('input[name="commandType"][value="curl"]').checked = true;
     }
 
-    const regex = /(\w+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"']+))/g;
-    const params = {};
-    let match;
-    while ((match = regex.exec(text)) !== null) {
-      const key = match[1];
-      const val = match[2] !== undefined ? match[2] : (match[3] !== undefined ? match[3] : match[4]);
-      params[key] = val;
-    }
+    const params = ArgosbxEnhanced.parseAssignments(text);
 
     protoKeys.forEach(k => {
       const ck = document.querySelector(`[data-proto="${k}"]`);
@@ -908,6 +937,10 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
       }
     });
 
+    document.getElementById('xhttp-options').hidden = argoSelect.value !== 'vxpt';
+    ArgosbxEnhanced.xhttpFields.forEach(id => document.getElementById(id).disabled = argoSelect.value !== 'vxpt');
+    document.getElementById('agproto').disabled = !argoSelect.value;
+    formError(collectVars());
     isUpdatingFromOutput = false;
   }
 
@@ -932,6 +965,7 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
 
       if (command === 'rep') {
         const m = collectVars();
+        if (formError(m)) { output.value = ''; return; }
         const vars = toBashVars(m);
         output.value = (vars ? vars + ' ' : '') + selectedCommand + ' rep';
       } else {
@@ -950,6 +984,7 @@ Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/
   });
 
   document.getElementById('copy').addEventListener('click', async () => {
+    if (formError(collectVars())) return;
     const t = document.getElementById('output');
     t.select(); t.setSelectionRange(0, 99999);
     try { await navigator.clipboard.writeText(t.value); showToast('已复制到剪贴板'); } catch (e) { document.execCommand('copy'); showToast('已复制'); }

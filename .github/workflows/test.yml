@@ -1,0 +1,34 @@
+name: Validate fixed Argo and XHTTP
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  configuration-and-transfer:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+      - name: Shell and JavaScript syntax
+        run: |
+          bash -n argosbx.sh
+          bash -n container/nodejs/start.sh
+          bash -n lib/argo.sh
+          node --check container/nodejs/index.js
+          node --check generator-enhanced.js
+          node tests/test_generator.js
+          git diff --check
+      - name: Install verified Xray test binary
+        run: python3 lib/xhttp_config.py install-xray "$RUNNER_TEMP"
+      - name: Configuration and fixed tunnel regression tests
+        run: XRAY_BINARY="$RUNNER_TEMP/xray" python3 -m unittest discover -s tests -v
+      - name: Encrypted transfers through TLS proxy and native H3
+        run: |
+          go build -o "$RUNNER_TEMP/test-proxy" tests/reverse_proxy.go
+          XRAY_BINARY="$RUNNER_TEMP/xray" TEST_PROXY_BINARY="$RUNNER_TEMP/test-proxy" python3 tests/integration_xhttp.py
+      - name: Build enhanced Node container
+        run: docker build -f container/nodejs/Dockerfile -t argosbx-enhanced:test .

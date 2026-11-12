@@ -1,3 +1,22 @@
+# Argosbx Enhanced
+
+此 fork 增加 **VLESS-XHTTP-Argo-TLS-ENC** 和 XHTTP 高级组合：HTTP/3、隧道 QUIC、XMUX、上下行分离、FinalMask TLS 分片。**所有 Argo 入口仅使用固定隧道，域名与 Token 缺一即报错，不申请随机隧道。**
+
+- [部署、参数与组合说明](docs/xhttp-argo.md)
+- [网页命令生成器源码](index.html)（下载仓库后打开；尚未启用 GitHub Pages）
+- [增强容器构建文件](container/nodejs/Dockerfile)（原作者镜像不包含本 fork 的改动）
+
+```bash
+vxpt=8080 argo=vxpt agn=up.example.com agk='你的固定隧道Token' \
+  bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)
+```
+
+先在 Cloudflare 固定隧道配置公开主机名，服务地址为 `http://127.0.0.1:8080`。完整客户端配置生成在 `~/agsbx/xhttp-client.json`。开启 FinalMask 时使用此 JSON 导入；普通 URI 无法完整表达该组合。
+
+配置与本地加密传输有自动测试；真实 Cloudflare/运营商链路仍需部署后验证。下文保留原项目介绍与致谢，功能限制以本 fork 的[增强文档](docs/xhttp-argo.md)为准。
+
+---
+
 ## Argosbx一键无交互小钢炮脚本💣：极简 + 轻量 + 快速
 
 ---------------------------------------
@@ -17,9 +36,9 @@
 #### 5、客户端支持方面，各类单协议分享、clash/mihomo/singbox聚合订阅分享都可支持
 
 #### 6、所有代理协议都无需域名（除了argo固定隧道、IP端口CDN），支持单个或多个代理协议任意组合并快速重置更换
-【 已支持：Naiveproxy、Vless-xhttp-tls、AnyTLS、Any-reality、Vless-xhttp-reality-vison-enc、Vless-tcp-reality-vision、Vless-xhttp-vison-enc、Vless-ws-vision-enc、Shadowsocks-2022、Vmess-ws、Socks5、Hysteria2、Tuic、Argo临时/固定隧道支持Vless-ws-vision-enc或Vmess-ws 】
+【 已支持：Naiveproxy、Vless-xhttp-tls、AnyTLS、Any-reality、Vless-xhttp-reality-vison-enc、Vless-tcp-reality-vision、Vless-xhttp-vison-enc、Vless-ws-vision-enc、Shadowsocks-2022、Vmess-ws、Socks5、Hysteria2、Tuic、Argo固定隧道支持Vless-xhttp-tls-enc、Vless-ws-vision-enc或Vmess-ws 】
 
-#### 7、建议配合SSH一键脚本命令生成器网页使用：https://yonggekkk.github.io/argosbx/
+#### 7、建议配合本仓库 index.html 命令生成器使用
 
 #### 8、如需要多样的功能，推荐使用VPS专用五合一脚本[Sing-box-yg](https://github.com/yonggekkk/sing-box-yg)
 

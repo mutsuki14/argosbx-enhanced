@@ -5,7 +5,7 @@ echo "脚本仅支持Alpine、Debian、Ubuntu系统" && exit
 fi
 [[ $EUID -ne 0 ]] && echo "请以root模式运行脚本" && exit
 sapsbxinstall(){
-URL="https://raw.githubusercontent.com/yonggekkk/argosbx/main/sapsbx.sh"
+URL="https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/sapsbx.sh"
 DEST="$HOME/sapsbx.sh"
 command -v curl > /dev/null 2>&1 && curl -sSL $URL -o $DEST || wget -q $URL -O $DEST
 if [ -s "$HOME/sapsbx.sh" ]; then
@@ -71,7 +71,7 @@ fi
 
 echo
 echo "每个账号对应Argo隧道端口空一格，回车则每个实例都不启用Argo，多个账号中有个别账号不启用填no"
-read -p "选填！当使用Argo固定/临时隧道时，此端口变量必填: " input
+read -p "选填！当使用Argo固定隧道时，此端口变量必填: " input
 if [ -z "$input" ]; then
 sed -i "65s/^.*$/VMPTS=\"\"/" $HOME/sapsbx.sh
 sed -i "68s/^.*$/AGNS=\"\"/" $HOME/sapsbx.sh
@@ -81,9 +81,11 @@ quoted=$(printf '%s ' $input)
 sed -i "65s/^.*$/VMPTS=\"${quoted% }\"/" $HOME/sapsbx.sh
 
 echo
-echo "每个账号对应Argo固定隧道域名空一格，回车则每个实例都启用Argo临时隧道，多个账号中有个别账号不启用填no"
-read -p "选填！Argo固定隧道域名: " input
+echo "每个账号对应Argo固定隧道域名空一格，启用Argo时必须填写，多个账号中有个别账号不启用填no"
+read -p "必填！Argo固定隧道域名: " input
 if [ -z "$input" ]; then
+echo "固定隧道域名不能为空" >&2
+exit 1
 sed -i "68s/^.*$/AGNS=\"\"/" $HOME/sapsbx.sh
 sed -i "71s/^.*$/AGKS=\"\"/" $HOME/sapsbx.sh
 else
@@ -113,7 +115,7 @@ sed -i "74s/^.*$/crontime=$input/" $HOME/sapsbx.sh
 fi
 echo "脚本安装设置完毕"
 echo "每天上午8:10-9:00之间脚本自动运行保活，可以再次进入脚本选择2测试执行一次" && sleep 3
-command -v curl > /dev/null 2>&1 && bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/argosbx/main/sap.sh) || bash <(wget -qO- https://raw.githubusercontent.com/yonggekkk/argosbx/main/sap.sh)
+command -v curl > /dev/null 2>&1 && bash <(curl -Ls https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/sap.sh) || bash <(wget -qO- https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/sap.sh)
 else
 echo "下载文件失败，请检查当前服务器是否支持curl或wget，网络是否支持github"
 fi

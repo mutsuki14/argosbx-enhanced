@@ -1,11 +1,41 @@
 #!/bin/bash
 export LANG=en_US.UTF-8
+# Keep the helper and self-update source on this fork.
+export ARGOSBX_REF=${ARGOSBX_REF:-main}
+export ARGOSBX_BASE="https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/$ARGOSBX_REF"
+_agsbx_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [ -s "$_agsbx_dir/lib/argo.sh" ]; then
+    . "$_agsbx_dir/lib/argo.sh"
+elif [ -s "$_agsbx_dir/../../lib/argo.sh" ]; then
+    . "$_agsbx_dir/../../lib/argo.sh"
+else
+    mkdir -p "$HOME/agsbx/lib"
+    if [ ! -s "$HOME/agsbx/lib/argo.sh" ] || [ "${1:-}" = rep ]; then
+        _agsbx_tmp=$(mktemp "$HOME/agsbx/lib/argo.XXXXXX") || exit 1
+        if (command -v curl >/dev/null 2>&1 && curl -fLsS --retry 2 "$ARGOSBX_BASE/lib/argo.sh" -o "$_agsbx_tmp") ||
+           (command -v wget >/dev/null 2>&1 && wget -qO "$_agsbx_tmp" "$ARGOSBX_BASE/lib/argo.sh"); then
+            mv "$_agsbx_tmp" "$HOME/agsbx/lib/argo.sh"
+            rm -f "$HOME/agsbx/lib/xhttp_config.py"
+        else
+            rm -f "$_agsbx_tmp"; echo '无法下载固定隧道组件' >&2; exit 1
+        fi
+    fi
+    . "$HOME/agsbx/lib/argo.sh"
+fi
+argo_preflight "${1:-}" || exit 1
 mkdir -p "$HOME/agsbx"
-url='https://raw.githubusercontent.com/yonggekkk/argosbx/main/argosbx.sh'
+url="$ARGOSBX_BASE/argosbx.sh"
 case "${*##* }" in list|del|upx|ups|upa|res) ;; *)
 cmd=""
-for v in uuid vlpt vmpt vwpt hypt tupt xhpt vxpt anpt arpt sspt sopt nvpt xupt xcpt reym cdnym argo agn agk warp name oap; do
-[ -n "${!v+x}" ] && cmd+="$v=\"${!v}\" "
+for v in uuid vlpt vmpt vwpt hypt tupt xhpt vxpt anpt arpt sspt sopt nvpt xupt xcpt reym cdnym argo agn agk agproto agqc ARGOSBX_REF warp name oap xhttp_mode xhttp_alpn xhttp_path xhttp_xmux xhttp_finalmask xhttp_address xhttp_download_address xhttp_download_port xhttp_download_host xhttp_download_servername xhttp_download_alpn xhttp_download_finalmask; do
+if [ -n "${!v+x}" ]; then
+    if [ "$v" = agk ]; then
+        cmd+="agk='<redacted>' "
+    else
+        printf -v _quoted '%q' "${!v}"
+        cmd+="$v=$_quoted "
+    fi
+fi
 done
 main="bash <(curl -Ls $url)"
 cmd+="$main${*:+ $*}"
@@ -59,11 +89,11 @@ export warp=${warp:-''}
 export name=${name:-''}
 export oap=${oap:-''}
 v46url="https://icanhazip.com"
-agsbxurl="https://raw.githubusercontent.com/yonggekkk/argosbx/main/argosbx.sh"
+agsbxurl="$ARGOSBX_BASE/argosbx.sh"
 showmode(){
-[ -s "$HOME/agsbx/sh.txt" ] && echo "上次输入的完整脚本：$(cat "$HOME/agsbx/sh.txt")"
-echo "Argosbx脚本一键SSH命令生器在线网址：https://yonggekkk.github.io/argosbx/"
-echo "主脚本：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/argosbx/main/argosbx.sh) 或 bash <(wget -qO- https://raw.githubusercontent.com/yonggekkk/argosbx/main/argosbx.sh)"
+[ -s "$HOME/agsbx/sh.txt" ] && echo "上次输入的脚本（Token 已隐藏）：$(cat "$HOME/agsbx/sh.txt")"
+echo "Argosbx脚本一键SSH命令生器在线网址：https://github.com/mutsuki14/argosbx-enhanced"
+echo "主脚本：bash <(curl -Ls $ARGOSBX_BASE/argosbx.sh) 或 bash <(wget -qO- $ARGOSBX_BASE/argosbx.sh)"
 echo "显示节点信息命令：agsbx list 【或者】 主脚本 list"
 echo "重置变量组命令：自定义各种协议变量组 agsbx rep 【或者】 自定义各种协议变量组 主脚本 rep"
 echo "更新脚本命令：原已安装的自定义各种协议变量组 主脚本 rep"
@@ -80,7 +110,7 @@ echo "甬哥Github项目 ：github.com/yonggekkk"
 echo "甬哥Blogger博客 ：ygkkk.blogspot.com"
 echo "甬哥YouTube频道 ：www.youtube.com/@ygkkk"
 echo "Argosbx一键无交互小钢炮脚本💣"
-echo "当前版本：V26.7.16"
+echo "当前版本：V26.11.12-enhanced"
 echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
 hostname=$(uname -a | awk '{print $2}')
 op=$(cat /etc/redhat-release 2>/dev/null || cat /etc/os-release 2>/dev/null | grep -i pretty_name | cut -d \" -f2)
@@ -178,10 +208,7 @@ case "$warp" in *x6*) xryx='ForceIPv6' ;; *x*) xryx='ForceIPv4v6' ;; *) xryx='Fo
 fi
 }
 upxray(){
-url="https://github.com/yonggekkk/argosbx/releases/download/argosbx/xray-$cpu"; out="$HOME/agsbx/xray"; (command -v curl >/dev/null 2>&1 && curl -Lo "$out" -# --retry 2 "$url") || (command -v wget>/dev/null 2>&1 && timeout 3 wget -O "$out" --tries=2 "$url")
-chmod +x "$HOME/agsbx/xray"
-sbcore=$("$HOME/agsbx/xray" version 2>/dev/null | awk '/^Xray/{print $2}')
-echo "已安装Xray正式版内核：$sbcore"
+argo_python install-xray "$HOME/agsbx" || return 1
 }
 upsingbox(){
 url="https://github.com/yonggekkk/argosbx/releases/download/argosbx/sing-box-$cpu"; out="$HOME/agsbx/sing-box"; (command -v curl>/dev/null 2>&1 && curl -Lo "$out" -# --retry 2 "$url") || (command -v wget>/dev/null 2>&1 && timeout 3 wget -O "$out" --tries=2 "$url")
@@ -208,7 +235,7 @@ echo
 echo "=========启用xray内核========="
 mkdir -p "$HOME/agsbx/xrk"
 if [ ! -e "$HOME/agsbx/xray" ]; then
-upxray
+upxray || exit 1
 fi
 cat > "$HOME/agsbx/xr.json" <<EOF
 {
@@ -1027,6 +1054,7 @@ cat >> "$HOME/agsbx/xr.json" <<EOF
   }
 }
 EOF
+argo_xhttp_configure || exit 1
 if pidof systemd >/dev/null 2>&1 && [ "$EUID" -eq 0 ]; then
 cat > /etc/systemd/system/xr.service <<EOF
 [Unit]
@@ -1194,64 +1222,47 @@ echo "下载Cloudflared-argo最新正式版内核：$argocore"
 url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$cpu"; out="$HOME/agsbx/cloudflared"; (command -v curl>/dev/null 2>&1 && curl -Lo "$out" -# --retry 2 "$url") || (command -v wget>/dev/null 2>&1 && timeout 3 wget -O "$out" --tries=2 "$url")
 chmod +x "$HOME/agsbx/cloudflared"
 fi
-cftupr=$([ -n "$agqc" ] && echo 'quic' || echo 'http2'); echo "$cftupr" > "$HOME/agsbx/cftupr.log"
-if [ "$argo" = "vmpt" ]; then argoport=$(cat "$HOME/agsbx/port_vm_ws" 2>/dev/null); echo "Vmess" > "$HOME/agsbx/vlvm"; elif [ "$argo" = "vwpt" ]; then argoport=$(cat "$HOME/agsbx/port_vw" 2>/dev/null); echo "Vless" > "$HOME/agsbx/vlvm"; elif [ "$argo" = "vxpt" ]; then argoport=$(cat "$HOME/agsbx/port_vx" 2>/dev/null); echo "Vlessx" > "$HOME/agsbx/vlvm"; fi; echo "$argoport" > "$HOME/agsbx/argoport.log"
-if [ -n "${ARGO_DOMAIN}" ] && [ -n "${ARGO_AUTH}" ]; then
-argoname='固定'
+argo_store || exit 1
+case "$argo" in
+vmpt) argoport=$(cat "$HOME/agsbx/port_vm_ws"); echo Vmess > "$HOME/agsbx/vlvm" ;;
+vwpt) argoport=$(cat "$HOME/agsbx/port_vw"); echo Vless > "$HOME/agsbx/vlvm" ;;
+vxpt) argoport=$(cat "$HOME/agsbx/port_vx"); echo Vlessx > "$HOME/agsbx/vlvm" ;;
+esac
+printf '%s\n' "$argoport" > "$HOME/agsbx/argoport.log"
 if pidof systemd >/dev/null 2>&1 && [ "$EUID" -eq 0 ]; then
 cat > /etc/systemd/system/argo.service <<EOF
 [Unit]
-Description=argo service
-After=network.target
+Description=Argosbx fixed Cloudflare Tunnel
+After=network-online.target
+Wants=network-online.target
 [Service]
 Type=simple
 NoNewPrivileges=yes
-TimeoutStartSec=0
-ExecStart=/root/agsbx/cloudflared tunnel --no-autoupdate --edge-ip-version auto --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) run --token "${ARGO_AUTH}"
+ExecStart="$HOME/agsbx/argo-run"
 Restart=on-failure
 RestartSec=5s
 [Install]
 WantedBy=multi-user.target
 EOF
-systemctl daemon-reload >/dev/null 2>&1
-systemctl enable argo >/dev/null 2>&1
-systemctl start argo >/dev/null 2>&1
+systemctl daemon-reload && systemctl enable argo && systemctl restart argo || exit 1
 elif command -v rc-service >/dev/null 2>&1 && [ "$EUID" -eq 0 ]; then
 cat > /etc/init.d/argo <<EOF
 #!/sbin/openrc-run
-description="argo service"
-command="/root/agsbx/cloudflared tunnel"
-command_args="--no-autoupdate --edge-ip-version auto --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) run --token ${ARGO_AUTH}"
+description="Argosbx fixed Cloudflare Tunnel"
+command="$HOME/agsbx/argo-run"
 pidfile="/run/argo.pid"
-command_background="yes"
+command_background=yes
 depend() {
 need net
 }
 EOF
-chmod +x /etc/init.d/argo >/dev/null 2>&1
-rc-update add argo default >/dev/null 2>&1
-rc-service argo start >/dev/null 2>&1
+chmod +x /etc/init.d/argo
+rc-update add argo default && rc-service argo restart || exit 1
 else
-nohup "$HOME/agsbx/cloudflared" tunnel --no-autoupdate --edge-ip-version auto --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) run --token "${ARGO_AUTH}" >/dev/null 2>&1 &
+nohup "$HOME/agsbx/argo-run" >> "$HOME/agsbx/argo.log" 2>&1 &
 fi
-echo "${ARGO_DOMAIN}" > "$HOME/agsbx/sbargoym.log"
-echo "${ARGO_AUTH}" > "$HOME/agsbx/sbargotoken.log"
-else
-argoname='临时'
-nohup "$HOME/agsbx/cloudflared" tunnel --url http://localhost:$(cat $HOME/agsbx/argoport.log) --edge-ip-version auto --no-autoupdate --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) > $HOME/agsbx/argo.log 2>&1 &
-fi
-echo "申请Argo$argoname隧道中……请稍等"
-sleep 15
-if [ -n "${ARGO_DOMAIN}" ] && [ -n "${ARGO_AUTH}" ]; then
-argodomain=$(cat "$HOME/agsbx/sbargoym.log" 2>/dev/null)
-else
-argodomain=$(grep -a trycloudflare.com "$HOME/agsbx/argo.log" 2>/dev/null | awk 'NR==2{print}' | awk -F// '{print $2}' | awk '{print $1}')
-fi
-if [ -n "${argodomain}" ]; then
-echo "Argo$argoname隧道申请成功"
-else
-echo "Argo$argoname隧道申请失败，请稍后再试"
-fi
+echo "固定隧道连接器已启动；请在 Cloudflare 将 $agn 指向 http://127.0.0.1:$argoport"
+echo "连接状态请检查 cloudflared 日志；域名已填写并不代表连通性验证通过。"
 fi
 sleep 5
 echo
@@ -1263,7 +1274,7 @@ mkdir -p "$HOME/bin"
 (command -v curl >/dev/null 2>&1 && curl -sL "$agsbxurl" -o "$SCRIPT_PATH") || (command -v wget >/dev/null 2>&1 && wget -qO "$SCRIPT_PATH" "$agsbxurl")
 chmod +x "$SCRIPT_PATH"
 if ! pidof systemd >/dev/null 2>&1 && ! command -v rc-service >/dev/null 2>&1; then
-echo "if ! find /proc/*/exe -type l 2>/dev/null | grep -E '/proc/[0-9]+/exe' | xargs -r readlink 2>/dev/null | grep -Eq 'agsbx/(s|x)' && ! pgrep -f 'agsbx/(s|x)' >/dev/null 2>&1; then echo '检测到系统可能中断过，或者变量格式错误？建议在SSH对话框输入 reboot 重启下服务器。现在自动执行Argosbx脚本的节点恢复操作，请稍等……'; sleep 6; export agqc=\"${agqc}\" alns=\"${alns}\" cfip=\"${cfip}\" hyjpt=\"${hyjpt}\" cdnym=\"${cdnym}\" name=\"${name}\" ippz=\"${ippz}\" argo=\"${argo}\" uuid=\"${uuid}\" $wap=\"${warp}\" $xhp=\"${port_xh}\" $xup=\"${port_xu}\" $vxp=\"${port_vx}\" $ssp=\"${port_ss}\" $sop=\"${port_so}\" $anp=\"${port_an}\" $arp=\"${port_ar}\" $vlp=\"${port_vl_re}\" $vwp=\"${port_vw}\" $vmp=\"${port_vm_ws}\" $hyp=\"${port_hy2}\" $tup=\"${port_tu}\" $xcp=\"${port_xc}\" $nvp=\"${port_nv}\" reym=\"${ym_vl_re}\" agn=\"${ARGO_DOMAIN}\" agk=\"${ARGO_AUTH}\"; bash "$HOME/bin/agsbx"; fi" >> ~/.bashrc
+echo "if ! find /proc/*/exe -type l 2>/dev/null | grep -E '/proc/[0-9]+/exe' | xargs -r readlink 2>/dev/null | grep -Eq 'agsbx/(s|x)' && ! pgrep -f 'agsbx/(s|x)' >/dev/null 2>&1; then echo '检测到系统可能中断过，或者变量格式错误？建议在SSH对话框输入 reboot 重启下服务器。现在自动执行Argosbx脚本的节点恢复操作，请稍等……'; sleep 6; export ARGOSBX_REF=\"${ARGOSBX_REF}\" agproto=\"${agproto}\" agqc=\"${agqc}\" alns=\"${alns}\" cfip=\"${cfip}\" hyjpt=\"${hyjpt}\" cdnym=\"${cdnym}\" name=\"${name}\" ippz=\"${ippz}\" argo=\"${argo}\" uuid=\"${uuid}\" $wap=\"${warp}\" $xhp=\"${port_xh}\" $xup=\"${port_xu}\" $vxp=\"${port_vx}\" $ssp=\"${port_ss}\" $sop=\"${port_so}\" $anp=\"${port_an}\" $arp=\"${port_ar}\" $vlp=\"${port_vl_re}\" $vwp=\"${port_vw}\" $vmp=\"${port_vm_ws}\" $hyp=\"${port_hy2}\" $tup=\"${port_tu}\" $xcp=\"${port_xc}\" $nvp=\"${port_nv}\" reym=\"${ym_vl_re}\" agn=\"${ARGO_DOMAIN}\" agk=\"\$(cat \"$HOME/agsbx/sbargotoken.log\")\"; bash "$HOME/bin/agsbx"; fi" >> ~/.bashrc
 fi
 sed -i '/export PATH="\$HOME\/bin:\$PATH"/d' ~/.bashrc
 echo 'export PATH="$HOME/bin:$PATH"' >> "$HOME/.bashrc"
@@ -1280,27 +1291,9 @@ if find /proc/*/exe -type l 2>/dev/null | grep -E '/proc/[0-9]+/exe' | xargs -r 
 echo '@reboot sleep 10 && /bin/sh -c "nohup $HOME/agsbx/xray run -c $HOME/agsbx/xr.json >/dev/null 2>&1 &"' >> /tmp/crontab.tmp
 fi
 fi
-sed -i '/agsbx\/cloudflared/d' /tmp/crontab.tmp
-if [ -n "$argo" ] && [ -n "$vmag" ]; then
-if [ -n "${ARGO_DOMAIN}" ] && [ -n "${ARGO_AUTH}" ]; then
-if ! pidof systemd >/dev/null 2>&1 && ! command -v rc-service >/dev/null 2>&1; then
-echo '@reboot sleep 10 && /bin/sh -c "nohup $HOME/agsbx/cloudflared tunnel --no-autoupdate --edge-ip-version auto --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) run --token $(cat $HOME/agsbx/sbargotoken.log 2>/dev/null) >/dev/null 2>&1 &"' >> /tmp/crontab.tmp
-fi
-else
-if command -v apk >/dev/null 2>&1; then
-cat > /etc/local.d/alpineargosbx.start <<EOF
-#!/bin/bash
-sleep 10
-nohup $HOME/agsbx/cloudflared tunnel --url http://localhost:\$(cat $HOME/agsbx/argoport.log) --edge-ip-version auto --no-autoupdate --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) > $HOME/agsbx/argo.log 2>&1 &
-sleep 10
-HOME="$HOME" $HOME/bin/agsbx list >/dev/null 2>&1
-EOF
-chmod +x /etc/local.d/alpineargosbx.start
-rc-update add local default >/dev/null 2>&1
-else
-echo '@reboot sleep 10 && /bin/bash -c "nohup $HOME/agsbx/cloudflared tunnel --url http://localhost:$(cat $HOME/agsbx/argoport.log) --edge-ip-version auto --no-autoupdate --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) > $HOME/agsbx/argo.log 2>&1 & sleep 10 && bash $HOME/bin/agsbx list >/dev/null 2>&1"' >> /tmp/crontab.tmp
-fi
-fi
+sed -i '/agsbx\/cloudflared/d; /agsbx\/argo-run/d' /tmp/crontab.tmp
+if [ -n "$argo" ] && [ -n "$vmag" ] && ! pidof systemd >/dev/null 2>&1 && ! command -v rc-service >/dev/null 2>&1; then
+printf '@reboot sleep 10 && "%s/agsbx/argo-run" >> "%s/agsbx/argo.log" 2>&1\n' "$HOME" "$HOME" >> /tmp/crontab.tmp
 fi
 crontab /tmp/crontab.tmp >/dev/null 2>&1
 rm /tmp/crontab.tmp
@@ -1447,7 +1440,7 @@ echo "$vl_xh_link" >> "$HOME/agsbx/jhsub.txt"
 echo "$vl_xh_link"
 echo
 fi
-if grep vless-xhttp "$HOME/agsbx/xr.json" >/dev/null 2>&1; then
+if grep vless-xhttp "$HOME/agsbx/xr.json" >/dev/null 2>&1 && [ ! -s "$HOME/agsbx/xhttp-options.json" ]; then
 echo "💣【 Vless-xhttp-enc 】支持ENC加密，节点信息如下："
 port_vx=$(cat "$HOME/agsbx/port_vx")
 vl_vx_link="vless://$uuid@$server_ip:$port_vx?encryption=$enkey&flow=xtls-rprx-vision&type=xhttp&path=$uuid-vx&mode=auto#${sxname}vl-xhttp-enc-$hostname"
@@ -2072,7 +2065,6 @@ echo "客户端密码：$uuid"
 echo
 fi
 argodomain=$(cat "$HOME/agsbx/sbargoym.log" 2>/dev/null)
-[ -z "$argodomain" ] && argodomain=$(grep -a trycloudflare.com "$HOME/agsbx/argo.log" 2>/dev/null | awk 'NR==2{print}' | awk -F// '{print $2}' | awk '{print $1}')
 if [ -n "$argodomain" ]; then
 vlvm=$(cat $HOME/agsbx/vlvm 2>/dev/null)
 if [ "$vlvm" = "Vmess" ]; then
@@ -2187,15 +2179,11 @@ vwa_link2="vless://$uuid@$cdnip2:80?encryption=$enkey&flow=xtls-rprx-vision&type
 echo "$vwa_link2" >> "$HOME/agsbx/jhsub.txt"
 elif [ "$vlvm" = "Vlessx" ]; then
 vlvmvx='Vless-xhttp'
-vwatls_link1="vless://$uuid@$cdnip1:443?encryption=$enkey&flow=xtls-rprx-vision&type=xhttp&host=$argodomain&path=$uuid-vx&security=tls&sni=$argodomain&mode=auto&fp=chrome&insecure=0&allowInsecure=0#${sxname}vless-xhttp-tls-argo-enc-vision-$hostname"
-echo "$vwatls_link1" >> "$HOME/agsbx/jhsub.txt"
-vwa_link2="vless://$uuid@$cdnip2:80?encryption=$enkey&flow=xtls-rprx-vision&type=xhttp&host=$argodomain&mode=auto&path=$uuid-vx&security=none#${sxname}vless-xhttp-argo-enc-vision-$hostname"
-echo "$vwa_link2" >> "$HOME/agsbx/jhsub.txt"
+argo_xhttp_export "$HOME/agsbx/jh.txt" || return 1
+vwatls_link1=$(cat "$HOME/agsbx/xhttp-uri.txt")
+vwa_link2='XHTTP 固定隧道仅导出 TLS；高级组合请使用 xhttp-client.json'
 fi
-sbtk=$(cat "$HOME/agsbx/sbargotoken.log" 2>/dev/null)
-if [ -n "$sbtk" ]; then
-nametn="Argo固定隧道token：$sbtk"
-fi
+nametn='Argo固定隧道（Token 已隐藏）'
 argoshow=$(
 echo "Argo隧道端口正在使用$vlvmvx主协议端口：$(cat $HOME/agsbx/argoport.log 2>/dev/null)
 Argo域名：$argodomain
@@ -2505,7 +2493,7 @@ sed -i '/export PATH="\$HOME\/bin:\$PATH"/d' ~/.bashrc
 crontab -l > /tmp/crontab.tmp 2>/dev/null
 sed -i '/agsbx\/sing-box/d' /tmp/crontab.tmp
 sed -i '/agsbx\/xray/d' /tmp/crontab.tmp
-sed -i '/agsbx\/cloudflared/d' /tmp/crontab.tmp
+sed -i '/agsbx\/cloudflared/d; /agsbx\/argo-run/d' /tmp/crontab.tmp
 sed -i '/websbx/d' /tmp/crontab.tmp
 crontab /tmp/crontab.tmp >/dev/null 2>&1
 rm /tmp/crontab.tmp
@@ -2558,8 +2546,9 @@ echo
 showmode
 exit
 elif [ "$1" = "rep" ]; then
+[ "$argo" = vxpt ] || rm -f "$HOME/agsbx/xhttp-options.json"
 cleandel
-rm -rf "$HOME/agsbx"/{sb.json,xr.json,sbargoym.log,sbargotoken.log,argo.log,argoport.log,cdnym,name}
+rm -rf "$HOME/agsbx"/{sb.json,xr.json,sbargoym.log,sbargotoken.log,argo.log,argoport.log,cdnym,name,xhttp-client.json,xhttp-uri.txt}
 echo "Argosbx重置协议完成，开始更新相关协议变量……" && sleep 2
 echo
 elif [ "$1" = "list" ]; then
@@ -2582,17 +2571,7 @@ argocore=$({ command -v curl >/dev/null 2>&1 && curl -Ls https://data.jsdelivr.c
 echo "下载Cloudflared-argo最新正式版内核：$argocore"
 url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$cpu"; out="$HOME/agsbx/cloudflared"; (command -v curl>/dev/null 2>&1 && curl -Lo "$out" -# --retry 2 "$url") || (command -v wget>/dev/null 2>&1 && timeout 3 wget -O "$out" --tries=2 "$url")
 chmod +x "$HOME/agsbx/cloudflared"
-if [ -e "$HOME/agsbx/sbargotoken.log" ]; then
-if pidof systemd >/dev/null 2>&1; then
-systemctl restart argo >/dev/null 2>&1
-elif command -v rc-service >/dev/null 2>&1; then
-rc-service argo restart >/dev/null 2>&1
-else
-nohup $HOME/agsbx/cloudflared tunnel --no-autoupdate --edge-ip-version auto --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) run --token $(cat $HOME/agsbx/sbargotoken.log 2>/dev/null) >/dev/null 2>&1 &
-fi
-else
-nohup $HOME/agsbx/cloudflared tunnel --url http://localhost:$(cat $HOME/agsbx/argoport.log 2>/dev/null) --edge-ip-version auto --no-autoupdate --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) > $HOME/agsbx/argo.log 2>&1 &
-fi
+argo_restart || exit 1
 echo "Cloudflared-argo内核更新完成" && sleep 2 && cip
 exit
 elif [ "$1" = "res" ]; then
@@ -2610,21 +2589,10 @@ xrestart
 ;;
 *"/agsbx/c"*)
 kill "$(basename "$P")" 2>/dev/null
-kill -15 $(pgrep -f 'agsbx/c' 2>/dev/null) >/dev/null 2>&1
-if [ -e "$HOME/agsbx/sbargotoken.log" ]; then
-if pidof systemd >/dev/null 2>&1; then
-systemctl restart argo >/dev/null 2>&1
-elif command -v rc-service >/dev/null 2>&1; then
-rc-service argo restart >/dev/null 2>&1
-else
-nohup $HOME/agsbx/cloudflared tunnel --no-autoupdate --edge-ip-version auto --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) run --token $(cat $HOME/agsbx/sbargotoken.log 2>/dev/null) >/dev/null 2>&1 &
-fi
-else
-nohup $HOME/agsbx/cloudflared tunnel --url http://localhost:$(cat $HOME/agsbx/argoport.log 2>/dev/null) --edge-ip-version auto --no-autoupdate --protocol $(cat $HOME/agsbx/cftupr.log 2>/dev/null) > $HOME/agsbx/argo.log 2>&1 &
-fi
 ;;
 esac
 done
+[ ! -f "$HOME/agsbx/argoport.log" ] || argo_restart || exit 1
 sleep 5 && echo "重启完成" && sleep 3 && cip
 exit
 fi

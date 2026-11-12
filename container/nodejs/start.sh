@@ -1,5 +1,32 @@
-#!/bin/sh
+#!/usr/bin/env bash
 export LANG=en_US.UTF-8
+# Keep the helper and self-update source on this fork.
+export ARGOSBX_REF=${ARGOSBX_REF:-main}
+export ARGOSBX_BASE="https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/$ARGOSBX_REF"
+_agsbx_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+if [ -s "$_agsbx_dir/lib/argo.sh" ]; then
+    . "$_agsbx_dir/lib/argo.sh"
+elif [ -s "$_agsbx_dir/../../lib/argo.sh" ]; then
+    . "$_agsbx_dir/../../lib/argo.sh"
+else
+    mkdir -p "$HOME/agsbx/lib"
+    if [ ! -s "$HOME/agsbx/lib/argo.sh" ] || [ "${1:-}" = rep ]; then
+        _agsbx_tmp=$(mktemp "$HOME/agsbx/lib/argo.XXXXXX") || exit 1
+        if (command -v curl >/dev/null 2>&1 && curl -fLsS --retry 2 "$ARGOSBX_BASE/lib/argo.sh" -o "$_agsbx_tmp") ||
+           (command -v wget >/dev/null 2>&1 && wget -qO "$_agsbx_tmp" "$ARGOSBX_BASE/lib/argo.sh"); then
+            mv "$_agsbx_tmp" "$HOME/agsbx/lib/argo.sh"
+            rm -f "$HOME/agsbx/lib/xhttp_config.py"
+        else
+            rm -f "$_agsbx_tmp"; echo '无法下载固定隧道组件' >&2; exit 1
+        fi
+    fi
+    . "$HOME/agsbx/lib/argo.sh"
+fi
+argo_preflight "${1:-}" || exit 1
+if [ -n "${argo:-}" ] && [ -z "${!argo}" ]; then
+    printf -v "$argo" '%s' "$(shuf -i 10000-65535 -n 1)"
+    export "$argo"
+fi
 export uuid=${uuid}
 export vlpt=${vlpt}
 export vmpt=${vmpt}
@@ -22,7 +49,7 @@ export warp=${warp}
 export name=${name}
 v46url="https://icanhazip.com"
 showmode(){
-echo "Argosbx脚本项目地址：https://github.com/yonggekkk/argosbx"
+echo "Argosbx脚本项目地址：https://github.com/mutsuki14/argosbx-enhanced"
 echo "---------------------------------------------------------"
 echo
 }
@@ -135,10 +162,7 @@ echo
 echo "=========启用xray内核========="
 mkdir -p "$HOME/agsbx/xrk"
 if [ ! -e "$HOME/agsbx/xray" ]; then
-url="https://github.com/yonggekkk/argosbx/releases/download/argosbx/xray-$cpu"; out="$HOME/agsbx/xray"; (command -v curl >/dev/null 2>&1 && curl -Lo "$out" -# --retry 2 "$url") || (command -v wget>/dev/null 2>&1 && timeout 3 wget -O "$out" --tries=2 "$url")
-chmod +x "$HOME/agsbx/xray"
-sbcore=$("$HOME/agsbx/xray" version 2>/dev/null | awk '/^Xray/{print $2}')
-echo "已安装Xray正式版内核：$sbcore"
+argo_python install-xray "$HOME/agsbx" || exit 1
 fi
 cat > "$HOME/agsbx/xr.json" <<EOF
 {
@@ -752,6 +776,7 @@ cat >> "$HOME/agsbx/xr.json" <<EOF
   }
 }
 EOF
+argo_xhttp_configure || exit 1
 nohup "$HOME/agsbx/xray" run -c "$HOME/agsbx/xr.json" >/dev/null 2>&1 &
 fi
 if [ -e "$HOME/agsbx/sb.json" ]; then
@@ -847,28 +872,15 @@ echo "下载Cloudflared-argo最新正式版内核：$argocore"
 url="https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$cpu"; out="$HOME/agsbx/cloudflared"; (command -v curl>/dev/null 2>&1 && curl -Lo "$out" -# --retry 2 "$url") || (command -v wget>/dev/null 2>&1 && timeout 3 wget -O "$out" --tries=2 "$url")
 chmod +x "$HOME/agsbx/cloudflared"
 fi
-if [ "$argo" = "vmpt" ]; then argoport=$(cat "$HOME/agsbx/vmpt" 2>/dev/null); echo "Vmess" > "$HOME/agsbx/vlvm"; elif [ "$argo" = "vwpt" ]; then argoport=$(cat "$HOME/agsbx/vwpt" 2>/dev/null); echo "Vless" > "$HOME/agsbx/vlvm"; fi; echo "$argoport" > "$HOME/agsbx/argoport.log"
-if [ -n "${agn}" ] && [ -n "${agk}" ]; then
-argoname='固定'
-nohup "$HOME/agsbx/cloudflared" tunnel --no-autoupdate --edge-ip-version auto --protocol http2 run --token "${agk}" >/dev/null 2>&1 &
-echo "${agn}" > "$HOME/agsbx/sbargoym.log"
-echo "${agk}" > "$HOME/agsbx/sbargotoken.log"
-else
-argoname='临时'
-nohup "$HOME/agsbx/cloudflared" tunnel --url http://localhost:$(cat $HOME/agsbx/argoport.log) --edge-ip-version auto --no-autoupdate --protocol http2 > "$HOME/agsbx/argo.log" 2>&1 &
-fi
-echo "申请Argo$argoname隧道中……请稍等"
-sleep 8
-if [ -n "${agn}" ] && [ -n "${agk}" ]; then
-argodomain=$(cat "$HOME/agsbx/sbargoym.log" 2>/dev/null)
-else
-argodomain=$(grep -a trycloudflare.com "$HOME/agsbx/argo.log" 2>/dev/null | awk 'NR==2{print}' | awk -F// '{print $2}' | awk '{print $1}')
-fi
-if [ -n "${argodomain}" ]; then
-echo "Argo$argoname隧道申请成功"
-else
-echo "Argo$argoname隧道申请失败，请稍后再试"
-fi
+argo_store || exit 1
+case "$argo" in
+vmpt) argoport=$(cat "$HOME/agsbx/vmpt"); echo Vmess > "$HOME/agsbx/vlvm" ;;
+vwpt) argoport=$(cat "$HOME/agsbx/vwpt"); echo Vless > "$HOME/agsbx/vlvm" ;;
+vxpt) argoport=$(cat "$HOME/agsbx/vxpt"); echo Vlessx > "$HOME/agsbx/vlvm" ;;
+esac
+printf '%s\n' "$argoport" > "$HOME/agsbx/argoport.log"
+nohup "$HOME/agsbx/argo-run" >> "$HOME/agsbx/argo.log" 2>&1 &
+echo "固定隧道连接器已启动；请在 Cloudflare 将 $agn 指向 http://127.0.0.1:$argoport"
 sleep 5
 if find /proc/*/exe -type l 2>/dev/null | grep -E '/proc/[0-9]+/exe' | xargs -r readlink 2>/dev/null | grep -Eq 'agsbx/(s|x)' || pgrep -f 'agsbx/(s|x)' >/dev/null 2>&1 ; then
 echo "Argosbx脚本进程启动成功，安装完毕" && sleep 2
@@ -991,7 +1003,7 @@ echo "$vl_xh_link" >> "$HOME/agsbx/jh.txt"
 echo "$vl_xh_link"
 echo
 fi
-if grep vless-xhttp "$HOME/agsbx/xr.json" >/dev/null 2>&1; then
+if grep vless-xhttp "$HOME/agsbx/xr.json" >/dev/null 2>&1 && [ ! -s "$HOME/agsbx/xhttp-options.json" ]; then
 echo "💣【 Vless-xhttp-enc 】支持ENC加密，节点信息如下："
 vxpt=$(cat "$HOME/agsbx/vxpt")
 vl_vx_link="vless://$uuid@$server_ip:$vxpt?encryption=$enkey&flow=xtls-rprx-vision&type=xhttp&path=$uuid-vx&mode=auto#${sxname}vl-xhttp-$hostname"
@@ -1098,7 +1110,6 @@ echo "客户端密码：$uuid"
 echo
 fi
 argodomain=$(cat "$HOME/agsbx/sbargoym.log" 2>/dev/null)
-[ -z "$argodomain" ] && argodomain=$(grep -a trycloudflare.com "$HOME/agsbx/argo.log" 2>/dev/null | awk 'NR==2{print}' | awk -F// '{print $2}' | awk '{print $1}')
 if [ -n "$argodomain" ]; then
 vlvm=$(cat $HOME/agsbx/vlvm 2>/dev/null)
 if [ "$vlvm" = "Vmess" ]; then
@@ -1133,11 +1144,12 @@ vwatls_link1="vless://$uuid@yg$(cfip).ygkkk.dpdns.org:443?encryption=$enkey&flow
 echo "$vwatls_link1" >> "$HOME/agsbx/jh.txt"
 vwa_link2="vless://$uuid@yg$(cfip).ygkkk.dpdns.org:80?encryption=$enkey&flow=xtls-rprx-vision&type=ws&host=$argodomain&path=$uuid-vw&security=none#${sxname}vless-ws-argo-enc-vision-$hostname"
 echo "$vwa_link2" >> "$HOME/agsbx/jh.txt"
+elif [ "$vlvm" = Vlessx ]; then
+argo_xhttp_export "$HOME/agsbx/jh.txt" || return 1
+vwatls_link1=$(cat "$HOME/agsbx/xhttp-uri.txt")
+vwa_link2='XHTTP 固定隧道仅导出 TLS；高级组合请使用 xhttp-client.json'
 fi
-sbtk=$(cat "$HOME/agsbx/sbargotoken.log" 2>/dev/null)
-if [ -n "$sbtk" ]; then
-nametn="Argo固定隧道token：$sbtk"
-fi
+nametn='Argo固定隧道（Token 已隐藏）'
 argoshow=$(
 echo "Argo隧道端口正在使用$vlvm-ws主协议端口：$(cat $HOME/agsbx/argoport.log 2>/dev/null)
 Argo域名：$argodomain

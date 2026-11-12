@@ -1,6 +1,8 @@
+> 此页为原有 SAP 镜像流程，仅支持原有协议。XHTTP 增强组合请使用 [增强文档](docs/xhttp-argo.md) 的主脚本或自行构建容器。Argo 必须同时提供固定域名和 Token。
+
 Argosbx在SAP平台部署代理节点，基于[eooce](https://github.com/eooce/Auto-deploy-sap-and-keepalive)相关功能现实，可用vless-ws-tls(cdn)、vmess-ws-argo-cdn、vmess-ws-tls-argo-cdn
 
-Vless-ws-tls为默认安装，Argo固定或临时隧道为可选，也可使用[workers/pages反代方式](https://github.com/yonggekkk/argosbx/blob/main/_worker.js)启用Vless-ws-tls的CDN替代Argo的CDN
+Vless-ws-tls为默认安装，Argo固定隧道为可选，也可使用[workers/pages反代方式](https://github.com/yonggekkk/argosbx/blob/main/_worker.js)启用Vless-ws-tls的CDN替代Argo的CDN
 
 SAP个人注册地址：https://www.sap.com/products/technology-platform/trial.html
 
@@ -16,11 +18,11 @@ SAP个人注册地址：https://www.sap.com/products/technology-platform/trial.h
 
 VPS服务器方式脚本地址：（再次进入快捷方式```bash sap.sh```）：
 
-```curl -sSL https://raw.githubusercontent.com/yonggekkk/argosbx/main/sap.sh -o sap.sh && chmod +x sap.sh && bash sap.sh```
+```curl -sSL https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/sap.sh -o sap.sh && chmod +x sap.sh && bash sap.sh```
 
 或者
 
-```wget -q https://raw.githubusercontent.com/yonggekkk/argosbx/main/sap.sh -O sap.sh && chmod +x sap.sh && bash sap.sh```
+```wget -q https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/sap.sh -O sap.sh && chmod +x sap.sh && bash sap.sh```
 
 ----------------------------------------- 
 
@@ -34,11 +36,11 @@ VPS服务器方式脚本地址：（再次进入快捷方式```bash sap.sh```）
 
 VPS服务器方式脚本地址：（再次进入快捷方式```bash saph.sh```）：
 
-```curl -sSL https://raw.githubusercontent.com/yonggekkk/argosbx/main/saph.sh -o saph.sh && chmod +x saph.sh && bash saph.sh```
+```curl -sSL https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/saph.sh -o saph.sh && chmod +x saph.sh && bash saph.sh```
 
 或者
 
-```wget -q https://raw.githubusercontent.com/yonggekkk/argosbx/main/saph.sh -O saph.sh && chmod +x saph.sh && bash saph.sh```
+```wget -q https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/saph.sh -O saph.sh && chmod +x saph.sh && bash saph.sh```
 
 ----------------------------------------- 
 
@@ -51,9 +53,9 @@ VPS服务器方式脚本地址：（再次进入快捷方式```bash saph.sh```�
 | REGIONS | 单个或多个地区变量代码 | 必填 | 登录实例地区 |
 | UUIDS | 单个或多个UUID | 必填 | 代理协议UUID |
 | APP_NAMES | 单个或多个应用程序app名称 | 可选，留空填```no```，则为地区码+邮箱 | 应用程序app名称 |
-| VMPTS | 单个或多个argo固定/临时隧道端口| 可选，留空填```no```，则关闭argo隧道  | 启用argo固定/临时隧道时必填 |
-| AGNS  | 单个或多个argo固定隧道域名 | 可选，留空填```no```，则启用临时隧道  | 使用argo固定域名时必填 |
-| AGKS | 单个或多个argo固定隧道token | 可选，留空填```no```，则启用临时隧道  | 使用argo固定域名时必填 |
+| VMPTS | 单个或多个argo固定隧道端口| 可选，留空填```no```，则关闭argo隧道  | 启用argo固定隧道时必填 |
+| AGNS  | 单个或多个argo固定隧道域名 | 可选，留空填```no```，则无法启用Argo  | 使用argo固定域名时必填 |
+| AGKS | 单个或多个argo固定隧道token | 可选，留空填```no```，则无法启用Argo  | 使用argo固定域名时必填 |
 | DELAPP | 单个或多个应用程序名app | 优先独立执行 | 删除指定应用程序app，github或docker执行后务必还原留空状态 |
 
 

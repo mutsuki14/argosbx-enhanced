@@ -31,12 +31,26 @@ fs.chmod("start.sh", 0o777, (err) => {
     child.stderr.on('data', (data) => console.error(data));
     child.on('close', (code) => {
         console.log(`child process exited with code ${code}`);
-        console.clear();
+        if (code !== 0) {
+            console.error('Argosbx initialization failed; refusing to advertise a successful deployment');
+            process.exit(code || 1);
+        }
         console.log(`App is running`);
     });
 });
 
 const server = http.createServer((req, res) => {
+    if (req.url === `/${uuid}/xhttp.json`) {
+        const clientConfig = `${process.env.HOME}/agsbx/xhttp-client.json`;
+        if (!fs.existsSync(clientConfig)) {
+            res.writeHead(404);
+            res.end('XHTTP configuration is not available');
+            return;
+        }
+        res.writeHead(200, {'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store'});
+        fs.createReadStream(clientConfig).pipe(res);
+        return;
+    }
     if (req.url === '/') {
         res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
         res.end('🟢恭喜！Argosbx小钢炮脚本-nodejs版部署成功！\n\n查看节点信息路径：/你的uuid');
