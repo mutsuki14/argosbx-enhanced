@@ -8,6 +8,8 @@ on:
       - generator-enhanced.js
       - generator-ui.js
       - styles.css
+      - connection-tools.js
+      - connection-ui.js
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -32,9 +34,12 @@ jobs:
         run: |
           node --check generator-enhanced.js
           node --check generator-ui.js
+          node --check connection-tools.js
+          node --check connection-ui.js
           node tests/test_generator.js
+          node tests/test_connection.js
           mkdir -p _site
-          cp index.html generator-enhanced.js generator-ui.js styles.css _site/
+          cp index.html generator-enhanced.js generator-ui.js connection-tools.js connection-ui.js styles.css _site/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v4
         with:

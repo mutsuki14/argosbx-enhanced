@@ -12,7 +12,7 @@ elif [ -s "$_agsbx_dir/../../lib/argo.sh" ]; then
 else
     mkdir -p "$HOME/agsbx/lib"
     if [ ! -s "$HOME/agsbx/lib/argo.sh" ] || [ "${1:-}" = rep ] ||
-       ! grep -q "^ARGOSBX_CLI_REV=2$" "$HOME/agsbx/lib/argo.sh"; then
+       ! grep -q "^ARGOSBX_CLI_REV=3$" "$HOME/agsbx/lib/argo.sh"; then
         _agsbx_tmp=$(mktemp "$HOME/agsbx/lib/argo.XXXXXX") || exit 1
         if (command -v curl >/dev/null 2>&1 && curl -fLsS --retry 2 "$ARGOSBX_BASE/lib/argo.sh" -o "$_agsbx_tmp") ||
            (command -v wget >/dev/null 2>&1 && wget -qO "$_agsbx_tmp" "$ARGOSBX_BASE/lib/argo.sh"); then

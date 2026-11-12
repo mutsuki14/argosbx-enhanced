@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared by the VPS installer and the Node container entry point.
 ARGOSBX_STATE_DIR=${ARGOSBX_STATE_DIR:-$HOME/agsbx}
-ARGOSBX_CLI_REV=2
+ARGOSBX_CLI_REV=3
 
 argo_error() { printf 'Argo 配置错误：%s\n' "$*" >&2; return 1; }
 
@@ -107,6 +107,8 @@ Argosbx Enhanced — 固定 Argo / XHTTP
   agsbx status                  查看本机状态，不显示凭据
   agsbx upgrade                 更新管理脚本，保留节点配置
   agsbx doctor [--network]       检查配置、进程、回源；可选公网 TLS 检查
+  agsbx doctor --report ~/argosbx-diagnostics.json
+                                导出脱敏报告，默认检查已安装的两种 XHTTP 节点
   agsbx mode stream-up           保留其他协议，切换为 H2 流式上行
   agsbx mode stream-one --disable-split
                                 关闭分离，切换为 H2 单请求双向流

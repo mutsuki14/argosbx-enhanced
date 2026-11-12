@@ -22,7 +22,10 @@ jobs:
           node --check container/nodejs/index.js
           node --check generator-enhanced.js
           node --check generator-ui.js
+          node --check connection-tools.js
+          node --check connection-ui.js
           node tests/test_generator.js
+          node tests/test_connection.js
           git diff --check
       - name: Install verified Xray test binary
         run: python3 lib/xhttp_config.py install-xray "$RUNNER_TEMP"

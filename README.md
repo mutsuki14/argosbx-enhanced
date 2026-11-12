@@ -348,6 +348,7 @@ REALITY 使用同名 `reality_*` 参数，例如 `reality_xmux`、`reality_final
 | `agsbx status` | 查看进程、固定域名和当前方案，不显示凭据 |
 | `agsbx doctor` | 检查配置、进程和本机回源，不修改服务 |
 | `agsbx doctor --network` | 额外检查公网域名的 TCP/443 与 TLS 证书 |
+| `agsbx doctor --report "$HOME/argosbx-diagnostics.json"` | 导出脱敏诊断报告，可在网页中查看问题与下一步建议 |
 | `agsbx mode stream-up` | 保留其他协议，切换为 H2 流式上行 |
 | `agsbx mode stream-one --disable-split` | 关闭下行分离，切换为 H2 单请求双向流 |
 | `agsbx mode packet-up --alpn h3 --finalmask off` | 切换 H3 分包模式并关闭不兼容的上行分片 |
@@ -425,13 +426,19 @@ docker cp argosbx-enhanced:/root/agsbx/xhttp-client.json ./xhttp-client.json
 
 Node 服务还提供 `/<UUID>` 普通订阅与 `/<UUID>/xhttp.json` 完整配置下载。上述示例只将网页端口绑定到宿主机本地，可通过 `http://127.0.0.1:3000/<UUID>/xhttp.json` 访问；路径和响应含凭据，请勿公开分享。
 
-## 网页命令生成器
+## 网页工作台
 
-在线访问：**[Argosbx 命令生成器](https://mutsuki14.github.io/argosbx-enhanced/)**。
+在线访问：**[Argosbx 网页工作台](https://mutsuki14.github.io/argosbx-enhanced/)**。
 
 网页由 GitHub Pages 托管；`main` 中的网页、样式或生成器脚本更新后自动发布。参数校验和命令生成在浏览器中完成，页面不会替你连接服务器或安装代理。
 
 工作台提供双节点、REALITY 直连、固定 Argo 三种预设，按基础连接、传输增强、更多设置组织表单。两种 XHTTP 节点可分别配置传输模式、XMUX、FinalMask、填充与分包参数；Argo 可配置下行分离。保留自定义协议、WARP 和订阅选项。
+
+工作台还包含三个连接工具：
+
+- **交互式链路图**：随参数变化展示 REALITY、固定 Argo 和独立下行线路；分别标注客户端 H2/H3、隧道 QUIC/HTTP2、本机 HTTP/HTTPS 回源。点击任意一段可查看说明并跳转到对应设置。它是配置示意，不是实测状态。
+- **固定隧道助手**：按当前表单列出 Cloudflare 公开主机名、Service、HTTP/2 to origin、TLS 校验及 CA Pool 等设置，可逐项复制或下载单条路由 JSON。流式模式必须填写 `agsbx tunnel` 输出的服务器 CA 绝对路径；不猜测安装目录。它不会更改 Cloudflare 账户，已有安装以服务器输出为准，不要覆盖隧道中的其他路由。
+- **诊断报告查看器**：导入下方命令生成的 JSON，在浏览器本地显示通过、需处理、未检测、待验证四种状态，以及固定的排查建议。支持按 REALITY / Argo 筛选；示例报告有明确标注，不代表实际检测。
 
 支持旧命令导入、实时参数检查、命令复制与下载、管理命令和深浅主题。Token、UUID 与订阅密码在预览中隐藏，复制或下载包含完整值；除主题外，填写内容不会自动保存到浏览器，也不会上传。
 
@@ -442,6 +449,29 @@ python3 -m http.server 8000 --bind 127.0.0.1
 ```
 
 打开 [本地命令生成器](http://127.0.0.1:8000/)，选择协议、填写固定隧道信息和高级参数，再复制命令到目标 Linux 主机执行。生成器会检查域名 / Token 缺失、H3 与分片冲突等问题；它本身不会部署服务。
+
+### 导出并查看诊断报告
+
+在已安装节点的 Linux 服务器上，以安装节点时的账户运行：
+
+```bash
+# 默认检查本机配置、进程和监听；同时检查已安装的两类 XHTTP 节点
+agsbx doctor --report "$HOME/argosbx-diagnostics.json"
+
+# 可选：加上服务器到固定域名的 DNS 与 TCP/TLS 检查
+agsbx doctor --report "$HOME/argosbx-diagnostics.json" --network
+
+# 只检查 REALITY，或不指定文件将 JSON 输出到标准输出
+agsbx doctor --profile reality --report
+```
+
+如果旧版提示不认识 `--report`，先运行 `agsbx upgrade`；网页也提供直接加载最新管理脚本的诊断命令。将生成的文件取回本机，拖入网页的「把连接问题，定位到具体一段」区域。
+
+报告只包含固定的检查编号、状态、错误类别、模式与时间，不包含 Token、UUID、密钥、域名、IP、证书路径或原始日志。文件权限为 `0600`；导出器拒绝覆盖节点配置目录和已有的非报告文件。浏览器限制导入文件为 256 KB，不上传或持久保存报告。
+
+诊断不修改节点配置，也不重启服务。**有失败项时仍会保存报告，并返回退出码 1**；无失败项返回 0。默认不进行公网探测，开启 `--network` 也只说明服务器侧 DNS / TCP / TLS 检查结果，不代表客户端可达。
+
+Cloudflare 远端路由、REALITY 目标站、H3、独立下行及最终客户端连接仍需实际验证。报告会将适用项目标为「待验证」，不会将连接器进程存在或 TLS 握手成功显示为端到端已连通。
 
 ## 常见问题
 
@@ -469,6 +499,8 @@ python3 -m http.server 8000 --bind 127.0.0.1
 
 [自动测试](.github/workflows/test.yml)覆盖参数校验、固定隧道启动、凭据缺失、证书与 Token 文件权限、配置导出和生成器命令转义；使用真实 Xray 校验配置，并进行三种模式、H2 / H3、FinalMask 和上下行分离的本地加密传输测试。流式测试确认回源协商为 H2，并验证服务端先发送、持续交替收发数据，同时构建 Node 容器。
 
+新增连接工具测试浏览器与服务器路由参数的一致性、报告格式校验、诊断只读性、公网检查开关、失败报告保留、凭据脱敏及文件覆盖保护。
+
 管理命令还测试终端隐藏输入、无交互防误安装、升级前校验、模式切换与失败恢复、订阅去重、凭据脱敏；Linux CI 运行真实 Xray 的切换和重启检查。
 
 REALITY 同样校验三种传输模式、自定义 XMUX、填充与分片配置；使用本地目标站完成真实 REALITY 认证与 VLESS ENC 加密传输。Linux 测试还直接运行主脚本及 Node 入口的配置模板，检查双节点生成结果。
@@ -482,6 +514,7 @@ REALITY 同样校验三种传输模式、自定义 XMUX、填充与分片配置�
 | [lib/xhttp_config.py](lib/xhttp_config.py) | XHTTP 参数处理、配置生成、导出和 Xray 下载校验 |
 | [lib/manage.py](lib/manage.py) | 安装向导、诊断、模式切换与失败恢复 |
 | [index.html](index.html) / [styles.css](styles.css) / [generator-ui.js](generator-ui.js) / [generator-enhanced.js](generator-enhanced.js) | 网页工作台、样式、交互与参数校验 |
+| [connection-tools.js](connection-tools.js) / [connection-ui.js](connection-ui.js) | 链路图、固定隧道助手、脱敏诊断报告的解析与展示 |
 | [container/nodejs](container/nodejs) | 增强容器入口 |
 | [tests](tests) | 配置与传输回归测试 |
 | [docs/xhttp-argo.md](docs/xhttp-argo.md) | 固定隧道和组合参数的详细说明 |

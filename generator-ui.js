@@ -425,6 +425,16 @@
         extra.map((k) => core.protocols.find((p) => p[0] === k)[1]).join("、");
       $("connection-summary").append(line);
     }
+    const connectionValues = Object.fromEntries(
+      Object.entries(v).filter(
+        ([key]) => !["agk", "uuid", "subid"].includes(key),
+      ),
+    );
+    document.dispatchEvent(
+      new CustomEvent("argosbx:change", {
+        detail: { values: connectionValues, method },
+      }),
+    );
   }
 
   function preset(name) {
@@ -702,5 +712,8 @@
       );
     }),
   );
+  document.addEventListener("argosbx:focus", (event) => {
+    if (typeof event.detail === "string") focusField(event.detail);
+  });
   render();
 })();

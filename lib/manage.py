@@ -214,6 +214,153 @@ def doctor(directory, network=False, profile='argo'):
     return 1 if failures else 0
 
 
+REPORT_SCHEMA = 'argosbx.diagnostics'
+
+
+def probe_public_host(domain, tls=False):
+    """Bound DNS and TLS checks in a child process; never emit addresses or errors."""
+    xhttp.host(domain, '固定域名')
+    script = ('import socket,sys; socket.getaddrinfo(sys.argv[1],443,type=socket.SOCK_STREAM)'
+              if not tls else
+              'import socket,ssl,sys; '
+              'c=socket.create_connection((sys.argv[1],443),timeout=5); '
+              's=ssl.create_default_context().wrap_socket(c,server_hostname=sys.argv[1]); s.close()')
+    result = subprocess.run([sys.executable, '-c', script, domain],
+                            capture_output=True, timeout=12 if tls else 8)
+    if result.returncode:
+        raise ValueError('public_tls_failed' if tls else 'dns_failed')
+
+
+def probe_origin_certificate(directory):
+    cert = directory / 'xhttp-origin.crt'
+    if not cert.is_file():
+        raise ValueError('certificate_missing')
+    result = subprocess.run(['openssl', 'x509', '-in', str(cert), '-noout', '-checkend', '0'],
+                            capture_output=True, timeout=5)
+    if result.returncode:
+        raise ValueError('certificate_invalid')
+
+
+def diagnostic_report(directory, network=False, profile=None):
+    """Export only allowlisted enums and booleans, never raw config, logs or exceptions."""
+    from datetime import datetime, timezone
+    report = {'schema': REPORT_SCHEMA, 'version': 1,
+              'generated_at': datetime.now(timezone.utc).isoformat(),
+              'scope': 'server', 'privacy': 'redacted',
+              'network_requested': bool(network), 'profiles': [], 'checks': []}
+
+    def add(identity, owner='server', status='pass', code='ok'):
+        report['checks'].append({'id': identity, 'profile': owner, 'status': status, 'code': code})
+
+    def check(identity, owner, callback, failure):
+        try:
+            callback()
+            add(identity, owner)
+            return True
+        except subprocess.TimeoutExpired:
+            add(identity, owner, 'fail', 'timeout')
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, StopIteration, subprocess.SubprocessError):
+            add(identity, owner, 'fail', failure)
+        return False
+
+    if not (directory / 'xr.json').is_file():
+        add('installation', status='fail', code='not_installed')
+        return report
+    try:
+        config = json.loads((directory / 'xr.json').read_text())
+        tags = {inbound.get('tag') for inbound in config['inbounds']}
+    except (OSError, ValueError, KeyError, TypeError, AttributeError):
+        add('installation', status='fail', code='config_invalid')
+        return report
+    add('installation')
+    check('server_config', 'server', lambda: checked_core(directory, directory / 'xr.json'), 'config_invalid')
+
+    def process_check(binary, config_file=None):
+        if not pids(directory, binary, config_file):
+            raise ValueError('not_running')
+
+    if sys.platform.startswith('linux'):
+        check('xray_process', 'server', lambda: process_check('xray', 'xr.json'), 'not_running')
+    else:
+        add('xray_process', status='skip', code='unsupported_platform')
+    selected = [profile] if profile else [name for name, spec in xhttp.PROFILES.items() if spec[0] in tags]
+    if not selected:
+        add('profile_config', status='fail', code='profile_missing')
+    for name in selected:
+        try:
+            _, inbound, opts = active_config(directory, name)
+            origin_tls = inbound.get('streamSettings', {}).get('security') == 'tls'
+        except (OSError, ValueError, KeyError, TypeError, AttributeError, StopIteration):
+            add('profile_config', name, 'fail', 'config_invalid')
+            continue
+        report['profiles'].append({'id': name, 'mode': opts['mode'], 'alpn': opts['alpn'],
+                                   'split': bool(opts.get('download_address')),
+                                   'origin_tls': origin_tls})
+        add('profile_config', name)
+        check('client_config', name,
+              lambda n=name: checked_core(directory, xhttp.profile_file(directory, n, 'client.json')), 'config_invalid')
+        check('origin', name, lambda: probe_origin(inbound, directory), 'origin_unreachable')
+        if name == 'argo':
+            credentials_ok = check('fixed_tunnel', name, lambda: fixed_tunnel(
+                read(directory / 'sbargoym.log'), read(directory / 'sbargotoken.log'), inbound['port']), 'tunnel_invalid')
+            if sys.platform.startswith('linux'):
+                check('cloudflared_process', name, lambda: process_check('cloudflared'), 'not_running')
+            else:
+                add('cloudflared_process', name, 'skip', 'unsupported_platform')
+            if origin_tls:
+                check('origin_certificate', name, lambda: probe_origin_certificate(directory), 'certificate_invalid')
+            if network and credentials_ok:
+                domain = read(directory / 'sbargoym.log')
+                if check('public_dns', name, lambda: probe_public_host(domain), 'dns_failed'):
+                    check('public_tls', name, lambda: probe_public_host(domain, True), 'public_tls_failed')
+                else:
+                    add('public_tls', name, 'skip', 'dependency_failed')
+            else:
+                reason = 'network_disabled' if not network else 'dependency_failed'
+                add('public_dns', name, 'skip', reason)
+                add('public_tls', name, 'skip', reason)
+            add('cloudflare_route', name, 'manual', 'remote_unverified')
+            if opts['alpn'] == 'h3':
+                add('http3', name, 'manual', 'client_required')
+            if opts.get('download_address'):
+                add('split_route', name, 'manual', 'client_required')
+        else:
+            add('reality_target', name, 'manual', 'remote_unverified')
+        add('client_connection', name, 'manual', 'client_required')
+    return report
+
+
+def save_diagnostic_report(directory, report, destination):
+    text = json.dumps(report, ensure_ascii=False, indent=2) + '\n'
+    if destination == '-':
+        print(text, end='')
+    else:
+        path = Path(destination).expanduser().absolute()
+        # An exported report must never replace live state or an unrelated file.
+        resolved, state = path.resolve(), directory.resolve()
+        xhttp.require(resolved != state and state not in resolved.parents, '请将报告保存在节点配置目录之外')
+        xhttp.require(not path.is_symlink(), '报告目标不能是符号链接')
+        if path.exists():
+            try:
+                previous = json.loads(path.read_text())
+            except (OSError, ValueError):
+                previous = None
+            xhttp.require(isinstance(previous, dict) and previous.get('schema') == REPORT_SCHEMA,
+                          '目标已存在且不是诊断报告，未覆盖')
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile('w', encoding='utf-8', dir=path.parent, delete=False) as output:
+                temporary = Path(output.name)
+                os.chmod(output.name, 0o600)
+                output.write(text)
+            temporary.replace(path)
+        finally:
+            if temporary and temporary.exists():
+                temporary.unlink()
+        print('脱敏诊断报告已保存：' + str(path), file=sys.stderr)
+    return 1 if any(item['status'] == 'fail' for item in report['checks']) else 0
+
+
 def change_mode(directory, mode, alpn=None, disable_split=False, dry_run=False, finalmask=None, profile='argo', updates=None):
     _, inbound, previous = active_config(directory, profile)
     prefix = xhttp.PROFILES[profile][2]
@@ -623,6 +770,7 @@ def main():
     tuning.add_argument('--dry-run', action='store_true')
     check = commands.add_parser('doctor')
     check.add_argument('--profile', choices=tuple(xhttp.PROFILES))
+    check.add_argument('--report', nargs='?', const='-', metavar='FILE', help='导出脱敏 JSON；省略 FILE 时输出到标准输出')
     check.add_argument('--network', action='store_true', help='额外检查公网域名 TCP/443 和证书')
     mode = commands.add_parser('mode')
     mode.add_argument('mode', choices=('packet-up', *xhttp.STREAM_MODES))
@@ -640,6 +788,8 @@ def main():
     args = parser.parse_args()
     directory = Path(os.environ.get('ARGOSBX_STATE_DIR', str(Path.home() / 'agsbx'))).expanduser().absolute()
     try:
+        if args.command == 'doctor' and args.report is not None:
+            return save_diagnostic_report(directory, diagnostic_report(directory, args.network, args.profile), args.report)
         if hasattr(args, 'profile') and args.profile is None:
             args.profile = 'argo'
             try:

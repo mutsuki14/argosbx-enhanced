@@ -13,9 +13,11 @@
       rel="icon"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='13' fill='%232b493c'/%3E%3Cpath d='m12 33 12-21 12 21M18 26h12' fill='none' stroke='%23d9f6a4' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
     />
-    <link rel="stylesheet" href="styles.css?v=2" />
+    <link rel="stylesheet" href="styles.css?v=3" />
     <script src="generator-enhanced.js?v=2" defer></script>
-    <script src="generator-ui.js?v=2" defer></script>
+    <script src="connection-tools.js?v=3" defer></script>
+    <script src="connection-ui.js?v=3" defer></script>
+    <script src="generator-ui.js?v=3" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#workspace">跳至配置工作台</a>
@@ -91,6 +93,9 @@
         <a href="#commands" class="nav-link"
           ><svg class="icon"><use href="#i-terminal" /></svg>管理命令</a
         >
+        <a href="#diagnostics" class="nav-link"
+          ><svg class="icon"><use href="#i-shield" /></svg>连接诊断</a
+        >
         <a href="#guide" class="nav-link"
           ><svg class="icon"><use href="#i-book" /></svg>部署指南</a
         >
@@ -106,7 +111,7 @@
         >
       </div>
       <div class="sidebar-footer">
-        <span class="version">WEB / 02</span><span>开源 · 本地生成</span>
+        <span class="version">WEB / 03</span><span>开源 · 本地生成</span>
       </div>
     </aside>
     <div class="main-shell" id="top">
@@ -223,6 +228,36 @@
               >
             </button>
           </div>
+          <details class="map-card" id="connection-map" open>
+            <summary>
+              <span
+                ><svg class="icon"><use href="#i-layers" /></svg
+                ><strong>连接如何发生</strong></span
+              ><span class="map-label">配置示意 · 非实测状态</span>
+            </summary>
+            <div class="map-body">
+              <p class="field-help">
+                点击链路中的一段，了解作用并跳转到对应设置。
+              </p>
+              <div id="route-canvas"></div>
+              <div id="map-inspector" class="map-inspector" hidden>
+                <div>
+                  <strong id="map-detail-title"></strong>
+                  <p id="map-detail-text"></p>
+                </div>
+                <button type="button" class="text-button" id="map-edit">
+                  调整这项设置 ↗
+                </button>
+              </div>
+              <div class="map-footer">
+                <span id="map-change" role="status"
+                  >与上方部署方案、下方传输参数同步。</span
+                ><a href="#tunnel-assistant" class="text-button"
+                  >固定隧道填写助手 ↗</a
+                >
+              </div>
+            </div>
+          </details>
           <div class="workspace-grid">
             <form
               id="config-form"
@@ -714,13 +749,101 @@
           </div>
         </section>
         <section
+          class="utility-section"
+          id="tunnel-assistant"
+          aria-labelledby="tunnel-title"
+        >
+          <div class="section-heading">
+            <div>
+              <span class="section-index">02</span>
+              <h2 id="tunnel-title">固定隧道，照着填写</h2>
+            </div>
+            <a
+              class="text-button"
+              href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/"
+              target="_blank"
+              rel="noreferrer"
+              >Cloudflare 官方说明 ↗</a
+            >
+          </div>
+          <div class="assistant-panel">
+            <p id="tunnel-disabled" class="field-help" hidden>
+              当前方案未使用固定 Argo。选择固定 Argo
+              或双节点方案后，这里会生成对应的回源设置。
+            </p>
+            <div id="tunnel-content">
+              <p class="assistant-lead">
+                在 Cloudflare
+                对应隧道的公开主机名中填写以下值。它们跟随当前表单更新，尚未写入你的
+                Cloudflare 账户。
+              </p>
+              <div class="tunnel-grid">
+                <div><div id="tunnel-rows"></div></div>
+                <div class="tunnel-notes">
+                  <span class="step-label">APPLY TO YOUR TUNNEL</span>
+                  <h3>先安装，再核对实际值。</h3>
+                  <ol>
+                    <li>在服务器运行上方部署命令。</li>
+                    <li>
+                      运行
+                      <code>agsbx tunnel</code>，核对脚本输出的端口与回源设置。
+                    </li>
+                    <li>在 Cloudflare 保存后，用实际客户端测试连接。</li>
+                  </ol>
+                  <div class="field" id="ca-path-field" hidden>
+                    <label for="ca-path">CA Pool 的服务器绝对路径</label
+                    ><input
+                      id="ca-path"
+                      placeholder="从 agsbx tunnel 输出中复制"
+                      spellcheck="false"
+                    /><small
+                      >这是服务器上的证书路径，不是本机文件。不确定时先留空，不会替你猜测安装目录。</small
+                    >
+                  </div>
+                  <p class="experiment-note" id="tunnel-experiment" hidden>
+                    stream-up / stream-one 为实验性。Cloudflare
+                    尚未正式支持公开主机名 gRPC；填写这些参数仍需实测兼容性。<a
+                      href="https://developers.cloudflare.com/network/grpc-connections/#limitations"
+                      target="_blank"
+                      rel="noreferrer"
+                      >查看限制 ↗</a
+                    >
+                  </p>
+                </div>
+              </div>
+              <div class="assistant-bottom">
+                <p id="tunnel-missing" role="status"></p>
+                <div>
+                  <button
+                    class="button secondary"
+                    id="copy-ingress"
+                    type="button"
+                  >
+                    复制单条路由 JSON</button
+                  ><button
+                    class="button secondary"
+                    id="download-ingress"
+                    type="button"
+                  >
+                    <svg class="icon"><use href="#i-download" /></svg>下载
+                  </button>
+                </div>
+              </div>
+              <p class="small-note">
+                这里只导出一条公开主机名路由，请勿用它覆盖隧道的全部路由。已有安装以服务器
+                <code>agsbx tunnel</code> 输出为准。
+              </p>
+            </div>
+          </div>
+        </section>
+        <section
           id="commands"
           class="utility-section"
           aria-labelledby="commands-title"
         >
           <div class="section-heading">
             <div>
-              <span class="section-index">02</span>
+              <span class="section-index">03</span>
               <h2 id="commands-title">连接之后，轻松管理</h2>
             </div>
             <span class="section-subtitle">适用于已安装的服务器</span>
@@ -761,13 +884,126 @@
           </details>
         </section>
         <section
+          class="utility-section"
+          id="diagnostics"
+          aria-labelledby="diagnostics-title"
+        >
+          <div class="section-heading">
+            <div>
+              <span class="section-index">04</span>
+              <h2 id="diagnostics-title">把连接问题，定位到具体一段</h2>
+            </div>
+            <span class="section-subtitle">服务器检查 · 本地读取报告</span>
+          </div>
+          <div class="diagnostic-intro">
+            <div class="assistant-panel">
+              <span class="step-label">01 / 在服务器生成报告</span>
+              <h3>检查一次，带回结果。</h3>
+              <p class="field-help">
+                复制到安装节点的同一用户终端执行。仅进行诊断，不重启或修改节点。旧版管理脚本可先运行
+                <code>agsbx upgrade</code>。
+              </p>
+              <div class="diagnostic-options">
+                <label
+                  ><input id="report-network" type="checkbox" />额外检查公网域名
+                  DNS / TCP / TLS</label
+                >
+              </div>
+              <div class="command-snippet">
+                <code id="diagnostic-command"></code
+                ><button
+                  type="button"
+                  id="copy-diagnostic"
+                  aria-label="复制诊断命令"
+                >
+                  <svg class="icon"><use href="#i-copy" /></svg>
+                </button>
+              </div>
+              <p class="small-note">
+                报告保存在服务器用户目录的
+                <code>argosbx-diagnostics.json</code>。通过 SFTP
+                或终端工具下载，再在右侧导入；有失败项时命令退出码为
+                1，报告仍会生成。
+              </p>
+            </div>
+            <div class="assistant-panel drop-zone" id="report-drop">
+              <span class="step-label">02 / 在这里读取报告</span
+              ><svg class="icon drop-icon"><use href="#i-upload" /></svg>
+              <h3>拖入诊断 JSON</h3>
+              <p>
+                只在浏览器中解析，不会上传或自动保存。<br />官方报告不包含
+                Token、UUID、密钥、域名、IP 或原始日志。
+              </p>
+              <div class="report-buttons">
+                <button type="button" class="button dark" id="choose-report">
+                  选择文件</button
+                ><button type="button" class="text-button" id="demo-report">
+                  查看示例
+                </button>
+              </div>
+              <input
+                id="report-file"
+                type="file"
+                accept=".json,application/json"
+                class="visually-hidden"
+                aria-label="选择诊断 JSON 文件"
+              />
+              <p id="report-error" role="alert"></p>
+            </div>
+          </div>
+          <div class="report-panel" id="report-result" hidden>
+            <div class="report-top">
+              <div>
+                <span id="report-kind" class="tag">导入的报告</span>
+                <h3 id="report-heading"></h3>
+                <p id="report-meta"></p>
+              </div>
+              <button type="button" id="clear-report" class="text-button">
+                清除报告 ×
+              </button>
+            </div>
+            <div class="report-counts" id="report-counts"></div>
+            <p class="report-limits">
+              这里展示报告生成时的检查结果，不会自动检测当前连接。通过本机或公网
+              TLS 检查，并不代表客户端 VLESS / H3 已连通。
+            </p>
+            <div class="report-filters" aria-label="筛选诊断节点">
+              <button
+                type="button"
+                data-report-filter="all"
+                aria-pressed="true"
+              >
+                全部</button
+              ><button
+                type="button"
+                data-report-filter="argo"
+                aria-pressed="false"
+              >
+                固定 Argo</button
+              ><button
+                type="button"
+                data-report-filter="reality"
+                aria-pressed="false"
+              >
+                REALITY
+              </button>
+            </div>
+            <div id="report-checks"></div>
+          </div>
+          <p
+            id="assistant-feedback"
+            role="status"
+            class="assistant-feedback"
+          ></p>
+        </section>
+        <section
           id="guide"
           class="utility-section"
           aria-labelledby="guide-title"
         >
           <div class="section-heading">
             <div>
-              <span class="section-index">03</span>
+              <span class="section-index">05</span>
               <h2 id="guide-title">从配置，到第一次连接</h2>
             </div>
             <a
