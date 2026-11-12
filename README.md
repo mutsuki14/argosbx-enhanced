@@ -427,7 +427,11 @@ Node 服务还提供 `/<UUID>` 普通订阅与 `/<UUID>/xhttp.json` 完整配置
 
 ## 网页命令生成器
 
-下载仓库后，在仓库根目录运行：
+在线访问：**[Argosbx 命令生成器](https://mutsuki14.github.io/argosbx-enhanced/)**。
+
+网页由 GitHub Pages 托管；`main` 中的 `index.html` 或 `generator-enhanced.js` 更新后自动发布。参数校验和命令生成在浏览器中完成，页面不会替你连接服务器或安装代理。
+
+也可以下载仓库，在仓库根目录运行：
 
 ```bash
 python3 -m http.server 8000 --bind 127.0.0.1
