@@ -17,8 +17,13 @@
     if (/trycloudflare\.com$/i.test(values.agn)) return '不支持免费随机隧道。';
     if (!/^[a-z\d_+/=-]+$/i.test(values.agk)) return '请只填写 Token 本身。';
     if (values.argo !== 'vxpt') return '';
-    if (values.xhttp_mode && values.xhttp_mode !== 'packet-up')
-      return '固定隧道 HTTP 回源请使用 packet-up。';
+    const mode = values.xhttp_mode || 'packet-up';
+    if (!['packet-up', 'stream-up', 'stream-one'].includes(mode))
+      return '请选择 packet-up、stream-up 或 stream-one。';
+    if (mode !== 'packet-up' && values.xhttp_alpn === 'h3')
+      return '固定 Argo 的流式模式请使用 HTTP/2；HTTP/3 请使用 packet-up。';
+    if (mode === 'stream-one' && values.xhttp_download_address)
+      return 'stream-one 使用同一请求双向传输；请清空下行地址或选择 stream-up。';
     if (values.xhttp_path && !/^\/[a-z\d/_-]{1,200}$/i.test(values.xhttp_path))
       return '路径须以 / 开头，仅含字母、数字、/、_、-。';
     for (const prefix of ['', 'download_']) {

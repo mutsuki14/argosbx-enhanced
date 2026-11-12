@@ -882,7 +882,8 @@ vxpt) argoport=$(cat "$HOME/agsbx/vxpt"); echo Vlessx > "$HOME/agsbx/vlvm" ;;
 esac
 printf '%s\n' "$argoport" > "$HOME/agsbx/argoport.log"
 nohup "$HOME/agsbx/argo-run" >> "$HOME/agsbx/argo.log" 2>&1 &
-echo "固定隧道连接器已启动；请在 Cloudflare 将 $agn 指向 http://127.0.0.1:$argoport"
+echo "固定隧道连接器已启动"
+argo_origin_hint || exit 1
 sleep 5
 if find /proc/*/exe -type l 2>/dev/null | grep -E '/proc/[0-9]+/exe' | xargs -r readlink 2>/dev/null | grep -Eq 'agsbx/(s|x)' || pgrep -f 'agsbx/(s|x)' >/dev/null 2>&1 ; then
 echo "Argosbx脚本进程启动成功，安装完毕" && sleep 2

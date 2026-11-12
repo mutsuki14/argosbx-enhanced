@@ -9,8 +9,11 @@ import os
 from pathlib import Path
 import re
 import secrets
+import ssl
+import subprocess
 import sys
 import platform
+import tempfile
 import urllib.request
 import zipfile
 from urllib.parse import quote, urlencode
@@ -26,6 +29,7 @@ FIELDS = ("mode", "alpn", "path", "xmux", "finalmask", "address",
           "download_address", "download_port", "download_servername",
           "download_host", "download_alpn", "download_finalmask")
 XRAY_VERSION = "v26.11.9"
+STREAM_MODES = ("stream-up", "stream-one")
 XRAY_ARCHIVES = {
     "x86_64": ("64", "b651f7e1d9966ee2c1b1ee1bf8b52c72771824d3065dce96bbc8bcc19ed95f82"),
     "aarch64": ("arm64-v8a", "64ed6858982a7f5eb85d88b811089063bd4f17561f4c8f44e0f1dc8e6f6430be"),
@@ -95,9 +99,13 @@ def options(env, previous=None):
     opts.setdefault("finalmask", "off")
     opts.setdefault("download_alpn", "h2")
     opts.setdefault("download_finalmask", "off")
-    require(opts["mode"] == "packet-up",
-            "固定隧道 HTTP 回源使用 packet-up；流式模式需要另行配置 HTTP/2 回源")
+    require(opts["mode"] in ("packet-up", *STREAM_MODES),
+            "xhttp_mode 只能为 packet-up、stream-up 或 stream-one")
     require(opts["alpn"] in ("h2", "h3"), "xhttp_alpn 只能为 h2 或 h3")
+    if opts["mode"] in STREAM_MODES:
+        require(opts["alpn"] == "h2", "固定 Argo 流式模式要求客户端使用 h2；H3 请使用 packet-up")
+    require(opts["mode"] != "stream-one" or not opts.get("download_address"),
+            "stream-one 在同一请求中双向传输，不能配置上下行分离；请清空 xhttp_download_address 或使用 stream-up")
     require(re.fullmatch(r"/[A-Za-z0-9/_-]{1,200}", opts["path"]) is not None,
             "xhttp_path 必须以 / 开头，仅含字母、数字、/、_、-，最多 201 字符")
     if isinstance(opts["xmux"], str):
@@ -156,6 +164,69 @@ def json_file(path, value):
     write_private(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 
+def saved_options(directory, env):
+    saved = Path(directory) / "xhttp-options.json"
+    return options(env, json.loads(saved.read_text()) if saved.exists() else None)
+
+
+def origin_certificate(directory):
+    """Persist a loopback-only self-signed trust anchor; never disable TLS verification."""
+    directory = Path(directory).resolve()
+    cert, key = directory / "xhttp-origin.crt", directory / "xhttp-origin.key"
+    require(cert.exists() == key.exists(), "本机回源证书或私钥缺失，请恢复 xhttp-origin.crt/key 后重试")
+    if cert.exists():
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+        context.load_cert_chain(str(cert), str(key))
+        current = subprocess.run(["openssl", "x509", "-checkend", "86400", "-noout", "-in", str(cert)],
+                                 capture_output=True)
+        if current.returncode == 0:
+            subprocess.run(["openssl", "verify", "-CAfile", str(cert), "-verify_hostname", "localhost",
+                            "-purpose", "sslserver", str(cert)], check=True, capture_output=True)
+            cert.chmod(0o600)
+            key.chmod(0o600)
+            return cert, key
+    with tempfile.TemporaryDirectory(prefix=".xhttp-tls-", dir=directory) as temporary:
+        pending_cert, pending_key = Path(temporary) / "cert.pem", Path(temporary) / "key.pem"
+        subprocess.run(["openssl", "req", "-new", "-x509", "-newkey", "ec",
+            "-pkeyopt", "ec_paramgen_curve:prime256v1", "-nodes", "-sha256", "-days", "3650",
+            "-subj", "/CN=localhost", "-addext", "subjectAltName=DNS:localhost,IP:127.0.0.1",
+            "-addext", "basicConstraints=critical,CA:TRUE",
+            "-addext", "keyUsage=critical,digitalSignature,keyCertSign",
+            "-addext", "extendedKeyUsage=serverAuth",
+            "-keyout", str(pending_key), "-out", str(pending_cert)], check=True, capture_output=True)
+        write_private(key, pending_key.read_text())
+        write_private(cert, pending_cert.read_text())
+    return cert, key
+
+
+def tunnel_ingress(directory):
+    """Export one remote route, not a replacement for the tunnel's other ingress rules."""
+    directory = Path(directory)
+    domain = host((directory / "sbargoym.log").read_text().strip(), "固定隧道域名")
+    require(not domain.lower().endswith("trycloudflare.com"), "不支持随机隧道")
+    config = json.loads((directory / "xr.json").read_text())
+    inbound = next(x for x in config["inbounds"] if x.get("tag") == "vless-xhttp")
+    tls = inbound["streamSettings"].get("security") == "tls"
+    ingress = {"hostname": domain,
+               "service": ("https" if tls else "http") + "://127.0.0.1:" + str(inbound["port"]),
+               "originRequest": {"http2Origin": tls, "noTLSVerify": False}}
+    if tls:
+        ingress["originRequest"].update(originServerName="localhost", matchSNItoHost=False,
+                                      caPool=str((directory / "xhttp-origin.crt").resolve()))
+    json_file(directory / "xhttp-tunnel-ingress.json", ingress)
+    return ingress
+
+
+def origin_info(directory):
+    ingress = tunnel_ingress(directory)
+    print("请在 Cloudflare 将 " + ingress["hostname"] + " 指向 " + ingress["service"])
+    if ingress["originRequest"]["http2Origin"]:
+        print("流式模式：开启 HTTP/2 to origin，Origin Server Name=localhost，关闭 Match SNI to Host；保持 TLS 校验开启。")
+        print("CA Pool=" + ingress["originRequest"]["caPool"])
+        print("还需在域名设置中启用 gRPC；公开 Tunnel 的流式兼容性属于实验性支持，须实际验证。")
+    print("回源参数文件：" + str(Path(directory) / "xhttp-tunnel-ingress.json") + "（需自行应用到 Cloudflare，此文件不会自动更新远程配置）")
+
+
 def stream(opts, domain, download=False):
     prefix = "download_" if download else ""
     result = {"network": "xhttp", "security": "tls", "tlsSettings": {
@@ -167,6 +238,8 @@ def stream(opts, domain, download=False):
                           "extra": {"xmux": copy.deepcopy(opts["xmux"])}}}
     if opts[prefix + "alpn"] == "h2":
         result["tlsSettings"]["fingerprint"] = "chrome"
+    if not download and opts["mode"] in STREAM_MODES:
+        result["xhttpSettings"]["extra"]["noGRPCHeader"] = False
     if opts[prefix + "finalmask"] == "tls-fragment":
         result["finalmask"] = copy.deepcopy(FRAGMENT)
     if download:
@@ -179,7 +252,7 @@ def stream(opts, domain, download=False):
 def configure(directory, env):
     directory = Path(directory)
     saved = directory / "xhttp-options.json"
-    opts = options(env, json.loads(saved.read_text()) if saved.exists() else None)
+    opts = saved_options(directory, env)
     config_file = directory / "xr.json"
     config = json.loads(config_file.read_text())
     inbound = next((x for x in config["inbounds"] if x.get("tag") == "vless-xhttp"), None)
@@ -190,6 +263,14 @@ def configure(directory, env):
         client.pop("flow", None)
     inbound["streamSettings"] = {"network": "xhttp", "security": "none",
         "xhttpSettings": {"path": opts["path"], "mode": "auto"}}
+    if opts["mode"] in STREAM_MODES:
+        cert, key = origin_certificate(directory)
+        inbound["streamSettings"].update(security="tls", tlsSettings={
+            "alpn": ["h2"], "minVersion": "1.2",
+            "certificates": [{"certificateFile": str(cert), "keyFile": str(key)}]})
+        # A single bidirectional gRPC-like request must not receive an SSE content type.
+        inbound["streamSettings"]["xhttpSettings"]["extra"] = {
+            "noSSEHeader": opts["mode"] == "stream-one"}
     json_file(config_file, config)
     json_file(saved, opts)
 
@@ -231,22 +312,25 @@ def export(directory):
         write_private(directory / "xhttp-uri.txt", uri + "\n")
         print(uri)
     print("完整 Xray 客户端配置：" + str(directory / "xhttp-client.json"))
+    origin_info(directory)
 
 
 def main():
     try:
         command = sys.argv[1]
         if command == "validate":
-            options(os.environ)
+            saved_options(sys.argv[2], os.environ) if len(sys.argv) > 2 else options(os.environ)
         elif command == "configure":
             configure(sys.argv[2], os.environ)
         elif command == "export":
             export(sys.argv[2])
+        elif command == "origin-info":
+            origin_info(sys.argv[2])
         elif command == "install-xray":
             install_xray(sys.argv[2])
         else:
             raise ValueError("未知命令")
-    except (ValueError, OSError, KeyError, StopIteration, IndexError) as error:
+    except (ValueError, OSError, KeyError, StopIteration, IndexError, subprocess.CalledProcessError) as error:
         print("XHTTP 配置错误：" + str(error), file=sys.stderr)
         return 1
     return 0

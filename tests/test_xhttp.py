@@ -30,7 +30,8 @@ class OptionsTests(unittest.TestCase):
     def test_invalid_combinations(self):
         for env in [
             {"xhttp_alpn": "h3", "xhttp_finalmask": "tls-fragment"},
-            {"xhttp_mode": "stream-one"},
+            {"xhttp_mode": "stream-one", "xhttp_download_address": "down.example.com"},
+            {"xhttp_mode": "stream-one", "xhttp_alpn": "h3"},
             {"xhttp_mode": "auto"},
             {"xhttp_mode": "stream-up", "xhttp_alpn": "h3"},
             {"xhttp_path": '/bad"path'},
@@ -49,6 +50,15 @@ class OptionsTests(unittest.TestCase):
         ]:
             with self.subTest(env=env), self.assertRaises(ValueError):
                 xhttp.options(env)
+
+    def test_streaming_modes_and_saved_conflicts(self):
+        for mode in xhttp.STREAM_MODES:
+            self.assertEqual(xhttp.options({"xhttp_mode": mode})["mode"], mode)
+        saved = xhttp.options({"xhttp_download_address": "down.example.com"})
+        with self.assertRaisesRegex(ValueError, "stream-one"):
+            xhttp.options({"xhttp_mode": "stream-one"}, saved)
+        cleared = xhttp.options({"xhttp_mode": "stream-one", "xhttp_download_address": ""}, saved)
+        self.assertFalse(cleared.get("download_address"))
 
     def test_xmux_partial_overrides_preserve_limits(self):
         actual = xhttp.options({"xhttp_xmux": '{"maxConnections":2}'})["xmux"]
@@ -135,6 +145,45 @@ class ConfigTests(unittest.TestCase):
             xhttp.configure(self.directory, {"xhttp_xmux": "bad json"})
         self.assertEqual((self.directory / "xr.json").read_bytes(), before)
 
+    def test_streaming_origin_export_and_switch_back(self):
+        original_certificate = None
+        for mode in xhttp.STREAM_MODES:
+            client = self.produce({"xhttp_mode": mode})
+            server = json.loads((self.directory / "xr.json").read_text())["inbounds"][0]["streamSettings"]
+            self.assertEqual(server["security"], "tls")
+            self.assertEqual(server["tlsSettings"]["alpn"], ["h2"])
+            self.assertEqual(server["xhttpSettings"]["extra"]["noSSEHeader"], mode == "stream-one")
+            self.assertFalse(client["outbounds"][0]["streamSettings"]["xhttpSettings"]["extra"]["noGRPCHeader"])
+            query = parse_qs(urlsplit((self.directory / "xhttp-uri.txt").read_text().strip()).query)
+            self.assertEqual(query["mode"], [mode])
+            self.assertFalse(json.loads(query["extra"][0])["noGRPCHeader"])
+            ingress = json.loads((self.directory / "xhttp-tunnel-ingress.json").read_text())
+            self.assertEqual(ingress["service"], "https://127.0.0.1:18080")
+            self.assertEqual(ingress["originRequest"], {"http2Origin": True, "noTLSVerify": False,
+                "originServerName": "localhost", "matchSNItoHost": False,
+                "caPool": str(self.directory.resolve() / "xhttp-origin.crt")})
+            for filename in ("xhttp-origin.crt", "xhttp-origin.key", "xhttp-tunnel-ingress.json"):
+                self.assertEqual((self.directory / filename).stat().st_mode & 0o777, 0o600)
+            certificate = (self.directory / "xhttp-origin.crt").read_bytes()
+            if original_certificate:
+                self.assertEqual(certificate, original_certificate)
+            original_certificate = certificate
+        self.produce({"xhttp_mode": "packet-up"})
+        server = json.loads((self.directory / "xr.json").read_text())["inbounds"][0]["streamSettings"]
+        self.assertEqual(server["security"], "none")
+        self.assertNotIn("tlsSettings", server)
+        ingress = json.loads((self.directory / "xhttp-tunnel-ingress.json").read_text())
+        self.assertEqual(ingress["service"], "http://127.0.0.1:18080")
+        self.assertEqual(ingress["originRequest"], {"http2Origin": False, "noTLSVerify": False})
+
+    def test_incomplete_origin_credentials_preserve_current_config(self):
+        self.produce({"xhttp_mode": "stream-up"})
+        before = (self.directory / "xr.json").read_bytes()
+        (self.directory / "xhttp-origin.key").unlink()
+        with self.assertRaisesRegex(ValueError, "私钥缺失"):
+            self.produce({"xhttp_mode": "stream-one"})
+        self.assertEqual((self.directory / "xr.json").read_bytes(), before)
+
     def test_core_accepts_all_combinations(self):
         if not self.xray:
             self.skipTest("Set XRAY_BINARY for real core validation")
@@ -142,7 +191,11 @@ class ConfigTests(unittest.TestCase):
             {"xhttp_xmux": '{"maxConnections":2}'}, {"xhttp_finalmask": "tls-fragment"},
             {"xhttp_download_address": "down.example.com"},
             {"xhttp_alpn": "h3", "xhttp_download_address": "down.example.com",
-             "xhttp_download_finalmask": "tls-fragment"}]
+             "xhttp_download_finalmask": "tls-fragment"},
+            {"xhttp_mode": "stream-up"}, {"xhttp_mode": "stream-one"},
+            {"xhttp_mode": "stream-up", "xhttp_download_address": "down.example.com",
+             "xhttp_finalmask": "tls-fragment", "xhttp_download_finalmask": "tls-fragment"},
+            {"xhttp_mode": "stream-one", "xhttp_finalmask": "tls-fragment"}]
         for env in combinations:
             with self.subTest(env=env):
                 (self.directory / "xhttp-options.json").unlink(missing_ok=True)
@@ -157,8 +210,9 @@ class ConfigTests(unittest.TestCase):
             self.skipTest("Linux installer rendering is checked in CI with XRAY_BINARY")
         (self.directory / "xray").symlink_to(self.xray)
         (self.directory / "xrk/dekey").write_text(self.decryption)
-        for entry in [ROOT / "argosbx.sh", ROOT / "container/nodejs/start.sh"]:
-            with self.subTest(entry=entry):
+        for entry, mode in ((entry, mode) for entry in [ROOT / "argosbx.sh", ROOT / "container/nodejs/start.sh"]
+                            for mode in ("packet-up", *xhttp.STREAM_MODES)):
+            with self.subTest(entry=entry, mode=mode):
                 source = entry.read_text()
                 fragments = []
                 for start, end in [("insuuid(){", "installxray(){"), ("installxray(){", "installsb(){"),
@@ -169,13 +223,15 @@ class ConfigTests(unittest.TestCase):
                     vxpt="18080", port_vx="18080", uuid="797024ab-d2a8-41ed-91d8-b615917fcac5",
                     pvk=base64.b64encode(bytes(range(32))).decode(), wpv6="2606:4700:110::1", res="[1,2,3]",
                     xip='"0.0.0.0/0", "::/0"', x1outtag="direct", x2outtag="direct", xsdns="8.8.8.8",
-                    xendip="162.159.192.1", xryx="ForceIPv4", wxryx="ForceIPv4")
+                    xendip="162.159.192.1", xryx="ForceIPv4", wxryx="ForceIPv4", xhttp_mode=mode)
                 script = 'source "$1"\n' + functions + '\nnohup(){ :; }; pidof(){ return 1; }; installxray; xrsbout'
                 result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "lib/argo.sh")],
                                         env=env, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(json.loads((self.directory / "xr.json").read_text())["inbounds"][0]["listen"],
                                  "127.0.0.1")
+                actual = json.loads((self.directory / "xr.json").read_text())["inbounds"][0]
+                self.assertEqual(actual["streamSettings"]["security"], "none" if mode == "packet-up" else "tls")
 
 
 class FixedTunnelTests(unittest.TestCase):
@@ -220,6 +276,16 @@ class FixedTunnelTests(unittest.TestCase):
         for file in [ROOT / "argosbx.sh", ROOT / "container/nodejs/start.sh", ROOT / "lib/argo.sh"]:
             self.assertNotIn("tunnel --url", file.read_text())
             subprocess.run(["bash", "-n", str(file)], check=True)
+
+    def test_saved_conflict_rejected_in_preflight(self):
+        xhttp.json_file(self.directory / "xhttp-options.json",
+                       xhttp.options({"xhttp_download_address": "down.example.com"}))
+        env = dict(argo="vxpt", vxpt="8080", agn="up.example.com", agk="eyTestToken", xhttp_mode="stream-one")
+        result = self.shell("argo_preflight rep", **env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("stream-one", result.stderr)
+        result = self.shell("argo_preflight rep", **env, xhttp_download_address="")
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

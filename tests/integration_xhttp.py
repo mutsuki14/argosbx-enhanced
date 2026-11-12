@@ -1,4 +1,4 @@
-"""Real Xray ENC transfer, H2 reverse proxy/split/FinalMask and native H3.
+"""Real Xray ENC transfer, HTTP/1.1 or TLS/H2 origins, split/FinalMask and native H3.
 
 Run with XRAY_BINARY and TEST_PROXY_BINARY. Does not access Cloudflare or a VPS.
 """
@@ -8,6 +8,8 @@ import json
 import os
 from pathlib import Path
 import socket
+import socketserver
+import struct
 import subprocess
 import tempfile
 import threading
@@ -45,6 +47,49 @@ class Echo(http.server.BaseHTTPRequestHandler):
         pass
 
 
+GREETING = b"server-first: streaming ready\n"
+
+
+class DuplexEcho(socketserver.BaseRequestHandler):
+    def handle(self):
+        self.request.sendall(GREETING)
+        while data := self.request.recv(65536):
+            self.request.sendall(data)
+
+
+class DuplexServer(socketserver.ThreadingTCPServer):
+    daemon_threads = True
+
+
+def receive(sock, size):
+    result = b""
+    while len(result) < size:
+        block = sock.recv(size - len(result))
+        assert block, "stream closed before reply"
+        result += block
+    return result
+
+
+def check_duplex(socks_port, destination_port):
+    """A buffered request cannot pass: read every reply before sending the next block."""
+    with socket.create_connection(("127.0.0.1", socks_port), timeout=8) as sock:
+        sock.sendall(b"\x05\x01\x00")
+        assert receive(sock, 2) == b"\x05\x00"
+        sock.sendall(b"\x05\x01\x00\x01\x7f\x00\x00\x01" + struct.pack("!H", destination_port))
+        header = receive(sock, 4)
+        assert header[:2] == b"\x05\x00", header
+        address_size = {1: 4, 4: 16}.get(header[3])
+        if header[3] == 3:
+            address_size = receive(sock, 1)[0]
+        assert address_size is not None, header
+        receive(sock, address_size + 2)
+        assert receive(sock, len(GREETING)) == GREETING
+        for size in (1, 4096, 65536, 17, 65536):
+            block = os.urandom(size)
+            sock.sendall(block)
+            assert receive(sock, size) == block, "interleaved stream mismatch"
+
+
 def main():
     xray = os.environ["XRAY_BINARY"]
     fixture = os.environ["TEST_PROXY_BINARY"]
@@ -57,6 +102,8 @@ def main():
             "-keyout", str(key), "-out", str(cert)], check=True, capture_output=True)
         echo = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Echo)
         threading.Thread(target=echo.serve_forever, daemon=True).start()
+        duplex = DuplexServer(("127.0.0.1", 0), DuplexEcho)
+        threading.Thread(target=duplex.serve_forever, daemon=True).start()
         try:
             for name, env in [
                 ("h2-packet", {}),
@@ -64,6 +111,12 @@ def main():
                 ("split", {"xhttp_download_address": "down.example.com"}),
                 ("split-fragment", {"xhttp_download_address": "down.example.com", "xhttp_download_finalmask": "tls-fragment"}),
                 ("h3", {"xhttp_alpn": "h3"}),
+                ("stream-up", {"xhttp_mode": "stream-up"}),
+                ("stream-up-fragment", {"xhttp_mode": "stream-up", "xhttp_finalmask": "tls-fragment"}),
+                ("stream-up-split", {"xhttp_mode": "stream-up", "xhttp_download_address": "down.example.com",
+                                     "xhttp_download_finalmask": "tls-fragment"}),
+                ("stream-one", {"xhttp_mode": "stream-one"}),
+                ("stream-one-fragment", {"xhttp_mode": "stream-one", "xhttp_finalmask": "tls-fragment"}),
             ]:
                 processes = []
                 handles = []
@@ -79,7 +132,8 @@ def main():
                     server["inbounds"][0]["port"] = origin_port
                     # Xray defaults reject private destinations; allow only this test echo endpoint.
                     server["outbounds"][0]["settings"] = {"finalRules": [{"action": "allow",
-                        "network": "tcp", "ip": ["127.0.0.1"], "port": echo.server_port}]}
+                        "network": "tcp", "ip": ["127.0.0.1"], "port": number}
+                        for number in (echo.server_port, duplex.server_address[1])]}
                     def launch(args, label):
                         log = open(case / (label + ".log"), "w+")
                         handles.append(log)
@@ -93,7 +147,10 @@ def main():
                         upload_port = origin_port
                     else:
                         ready = case / "proxy.json"
-                        launch([fixture, "http://127.0.0.1:" + str(origin_port), str(cert), str(key), str(ready)], "proxy")
+                        streaming = env.get("xhttp_mode") in xhttp.STREAM_MODES
+                        scheme = "https" if streaming else "http"
+                        launch([fixture, scheme + "://127.0.0.1:" + str(origin_port), str(cert), str(key), str(ready),
+                                str(test.directory / "xhttp-origin.crt")], "proxy")
                         deadline = time.monotonic() + 8
                         while not ready.exists() and time.monotonic() < deadline:
                             time.sleep(.05)
@@ -121,9 +178,16 @@ def main():
                         input=payload, capture_output=True)
                     assert result.returncode == 0, result.stderr.decode()
                     assert hashlib.sha256(payload).digest() == hashlib.sha256(result.stdout).digest(), "Transfer mismatch"
+                    check_duplex(socks_port, duplex.server_address[1])
                     if name != "h3":
-                        assert "HTTP/2.0" in (case / "proxy.log").read_text()
-                    print(name + ": 256 KiB ENC upload/download passed, TLS verification enabled", flush=True)
+                        proxy_log = (case / "proxy.log").read_text()
+                        assert "HTTP/2.0" in proxy_log
+                        if streaming:
+                            assert "origin=HTTP/2.0" in proxy_log, "origin did not negotiate H2"
+                            assert "content-type=application/grpc" in proxy_log, "streaming header missing"
+                            if env["xhttp_mode"] == "stream-one":
+                                assert "response-type=text/event-stream" not in proxy_log
+                    print(name + ": 256 KiB ENC transfer + server-first/interleaved duplex passed, TLS verified", flush=True)
                 except Exception:
                     for handle in handles:
                         handle.flush()
@@ -141,6 +205,8 @@ def main():
         finally:
             echo.shutdown()
             echo.server_close()
+            duplex.shutdown()
+            duplex.server_close()
 
 
 if __name__ == "__main__":

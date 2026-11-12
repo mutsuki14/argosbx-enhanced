@@ -68,7 +68,8 @@ argo_python() {
 argo_preflight() {
     argo_validate || return 1
     if [ "${argo:-}" = vxpt ]; then
-        argo_python validate || return 1
+        # Validate the effective saved + requested configuration before rep stops services.
+        argo_python validate "$ARGOSBX_STATE_DIR" || return 1
     fi
     case "${1:-}" in
         upa) argo_saved || return 1 ;;
@@ -122,6 +123,14 @@ argo_restart() {
         rc-service argo restart
     else
         nohup "$ARGOSBX_STATE_DIR/argo-run" >> "$ARGOSBX_STATE_DIR/argo.log" 2>&1 &
+    fi
+}
+
+argo_origin_hint() {
+    if [ "${argo:-}" = vxpt ]; then
+        argo_python origin-info "$ARGOSBX_STATE_DIR"
+    else
+        printf '请在 Cloudflare 将 %s 指向 http://127.0.0.1:%s\n' "$agn" "$argoport"
     fi
 }
 

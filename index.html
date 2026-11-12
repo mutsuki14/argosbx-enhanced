@@ -528,7 +528,8 @@
         <div id="xhttp-options" hidden>
           <h3>XHTTP 增强组合</h3>
           <div class="row"><label>客户端 HTTP 版本</label><select id="xhttp_alpn"><option value="h2">HTTP/2</option><option value="h3">HTTP/3</option></select></div>
-          <div class="row"><label>上行模式</label><select id="xhttp_mode"><option value="packet-up">packet-up（默认）</option></select></div>
+          <div class="row"><label>上行模式</label><select id="xhttp_mode"><option value="packet-up">packet-up（默认）</option><option value="stream-up">stream-up（实验性，HTTP/2）</option><option value="stream-one">stream-one（实验性，HTTP/2，不分离）</option></select></div>
+          <p>stream-up / stream-one 会启用本机 HTTPS 回源。请按部署输出在固定隧道中开启 HTTP/2 to origin、填写 CA Pool，并启用域名 gRPC。Cloudflare 尚未承诺公开隧道的流式兼容性，需实际测试；stream-one 不支持上下行分离。</p>
           <div class="row"><label>随机路径</label><input id="xhttp_path" type="text" placeholder="留空自动生成；自定义如 /my-path" /></div>
           <div class="row"><label>优选 IP / 地址</label><input id="xhttp_address" type="text" placeholder="留空使用固定隧道域名" /></div>
           <div class="row"><label>XMUX 参数（JSON）</label><input id="xhttp_xmux" type="text" placeholder='{"maxConcurrency":"16-32","hMaxRequestTimes":"600-900"}' /></div>

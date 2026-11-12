@@ -6,6 +6,8 @@
 
 在基础链路上，可配置 **HTTP/3、QUIC 隧道、XMUX、上下行分离和 FinalMask TLS 分片**。提供 Linux 安装脚本、网页命令生成器和可自行构建的 Node 容器。
 
+传输模式支持默认的 `packet-up`，以及通过 **HTTPS + HTTP/2 回源**实现的实验性 `stream-up` / `stream-one`。后两种模式需要同步调整 Cloudflare 的回源设置，详见[流式模式](#流式模式实验性)。
+
 > **本项目的所有 Argo 入口只支持固定隧道。** 必须同时提供固定域名和 Tunnel Token；缺失时停止部署，不创建或恢复 `trycloudflare.com` 随机隧道。VMess / VLESS WebSocket 的 Argo 入口同样遵守这一规则。
 
 [快速部署](#快速部署) · [客户端导入](#客户端导入) · [增强组合](#增强组合) · [参数参考](#参数参考) · [Docker 部署](#docker-部署) · [常见问题](#常见问题)
@@ -39,13 +41,13 @@
 flowchart LR
     C["Xray 客户端"] -->|"TLS：HTTP/2 或 HTTP/3"| E["Cloudflare 边缘"]
     E -->|"固定 Tunnel：QUIC 或 HTTP2"| T["服务器上的 cloudflared"]
-    T -->|"本机 HTTP：127.0.0.1:8080"| X["Xray：VLESS + XHTTP + ENC"]
+    T -->|"本机 HTTP 或 HTTPS/H2：127.0.0.1:8080"| X["Xray：VLESS + XHTTP + ENC"]
 ```
 
 - **TLS** 保护客户端至 Cloudflare 的连接，证书由该 HTTPS 入口提供。
 - **固定 Tunnel** 连接 Cloudflare 与服务器上的 cloudflared，使用独立的传输协议。
 - **VLESS ENC** 提供客户端至 Xray 的端到端加密，TLS 在 Cloudflare 终止不会移除这一层。
-- Xray 的增强入站仅监听 `127.0.0.1`，回源使用 HTTP；这个本机端口不需要配置 TLS 证书，也不需要向公网开放。
+- Xray 的增强入站仅监听 `127.0.0.1`，无需向公网开放。`packet-up` 默认使用 HTTP 回源；流式模式自动生成本机证书，改用 HTTPS / H2 回源。
 
 客户端使用 H3 与 cloudflared 使用 QUIC 是两个独立设置。设置其中一个，不会自动改变另一个。
 
@@ -54,7 +56,7 @@ flowchart LR
 ### 1. 准备环境
 
 - 一台 Linux `x86_64` 或 `aarch64/arm64` 主机，能够下载 GitHub 上的脚本和内核。
-- Bash、curl，以及用于配置生成的 Python 3。root 安装会尝试通过系统包管理器补齐 Python 3；非 root 环境请预先安装依赖。
+- Bash、curl、OpenSSL，以及用于配置生成的 Python 3。root 安装会尝试通过系统包管理器补齐依赖；非 root 环境请预先安装。
 - 一个可以配置 Cloudflare Tunnel 公开主机名的域名。
 - 支持 XHTTP 和 VLESS ENC 的 Xray 客户端；使用 FinalMask 时还需要对应的内核支持。本项目以 **Xray v26.11.9** 验证这些功能。
 
@@ -93,6 +95,43 @@ bash "$HOME/bin/agsbx" list
 
 连接器启动只代表进程已启动。请检查 Cloudflare 中的隧道状态，再导入客户端实际测试连接。
 
+## 流式模式（实验性）
+
+| 模式 | 客户端连接 | 本机回源 | 上下行分离 |
+| --- | --- | --- | --- |
+| `packet-up` | H2 或 H3 | HTTP | 支持 |
+| `stream-up` | H2 | HTTPS + H2 | 支持 |
+| `stream-one` | H2 | HTTPS + H2 | 不支持；同一请求双向传输 |
+
+首次部署 `stream-up`：
+
+```bash
+xhttp_mode=stream-up xhttp_alpn=h2 \
+  vxpt=8080 argo=vxpt agn=up.example.com agk='YOUR_TUNNEL_TOKEN' \
+  bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)
+```
+
+使用 `stream-one` 时，将 `xhttp_mode` 改为 `stream-one`，且不配置下行分离。已有安装在命令末尾加 `rep`；如果之前启用过分离，还需传入 `xhttp_download_address=''` 清除旧设置。
+
+脚本自动生成并保存 `~/agsbx/xhttp-origin.crt` 和 `~/agsbx/xhttp-origin.key`。然后在**固定隧道的公开主机名**上应用以下设置：
+
+| Cloudflare 设置 | 值 |
+| --- | --- |
+| Service | **HTTPS**，`127.0.0.1:8080`（端口与 `vxpt` 一致） |
+| HTTP/2 to origin / `http2Origin` | **开启** |
+| Origin Server Name | `localhost` |
+| Match SNI to Host | **关闭** |
+| CA Pool | 部署输出的 `xhttp-origin.crt` **绝对路径**；root / 本项目容器通常为 `/root/agsbx/xhttp-origin.crt` |
+| Disable TLS certificate verification / `noTLSVerify` | **关闭 / false**，保留证书校验 |
+
+还需在 Cloudflare **域名的 Network 设置**中开启 gRPC。`agsbx list` 会导出 `~/agsbx/xhttp-tunnel-ingress.json`，其中包含这条路由的实际服务地址和回源参数，方便核对。**该文件不会自动修改 Cloudflare 配置，也不是用于覆盖其他隧道路由的完整配置。**
+
+流式客户端保留 gRPC 请求头；`stream-one` 的服务端关闭 SSE 响应头，以减少同一请求双向传输时的兼容问题。XMUX 与 H2 FinalMask 可继续使用。固定 Argo 的流式配置暂不接受客户端 H3。
+
+Cloudflare 官方目前仍将公开主机名上的 gRPC 列为未支持场景，因此这里提供的是经过本地真实传输验证的**实验性配置**，不能保证每条 Cloudflare 线路都可用。[Cloudflare 限制说明](https://developers.cloudflare.com/network/grpc-connections/)、[HTTP/2 回源参数](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/#http2origin)。
+
+回退时显式设置 `xhttp_mode=packet-up` 重配，并将 Cloudflare Service 改回 **HTTP**、关闭 HTTP/2 to origin。修改脚本模式后，远程回源设置必须同步修改。
+
 ## 客户端导入
 
 | 文件 | 内容与使用方式 |
@@ -101,6 +140,7 @@ bash "$HOME/bin/agsbx" list
 | `~/agsbx/xhttp-uri.txt` | VLESS 分享链接，需要客户端支持 XHTTP、ENC 及 URI 中的 `extra` |
 | `~/agsbx/jh.txt` | 普通聚合订阅；可完整表达的增强节点链接会加入其中 |
 | `~/agsbx/xhttp-options.json` | 保存高级参数和随机路径，供后续重配及重新导出使用 |
+| `~/agsbx/xhttp-tunnel-ingress.json` | 当前固定隧道路由需要应用的回源设置 |
 
 运行 `agsbx list` 可重新导出配置。文件包含节点凭据，应作为私有配置保存。
 
@@ -159,7 +199,7 @@ xhttp_download_address=down.example.com \
 
 **两个入口必须最终到达同一个 Xray 进程的同一个 XHTTP 入站。** 在另一台服务器运行相同 UUID 的节点，或将请求分散到不同 Xray 副本，都不能替代这个要求。
 
-下行域名需要有效证书，并反向代理到同一 `127.0.0.1:8080`。例如同机 Caddy 的配置：
+下行域名需要有效证书，并反向代理到同一 `127.0.0.1:8080`。以下同机 Caddy 示例适用于默认的 `packet-up`；`stream-up` 的下行代理也需改为 HTTPS / H2 回源并信任本机证书，见[详细示例](docs/xhttp-argo.md#流式分离的下行回源)。
 
 ```caddyfile
 down.example.com {
@@ -181,7 +221,7 @@ xhttp_alpn=h2 xhttp_finalmask=tls-fragment \
   bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)
 ```
 
-本项目的 FinalMask 支持范围是 **TCP 上的 TLS ClientHello 分片**，使用 Xray 的 `streamSettings.finalmask`。它作用于客户端连接，不给本机 HTTP 回源添加伪装层，也不允许任意填写与服务不匹配的 SNI 域名。
+本项目的 FinalMask 支持范围是 **TCP 上的 TLS ClientHello 分片**，使用 Xray 的 `streamSettings.finalmask`。它作用于客户端连接，不给本机回源添加分片层，也不允许任意填写与服务不匹配的 SNI 域名。
 
 同一方向的 H3 与 `tls-fragment` 不能叠加。上下行分离时，可分别设置为上行 H3、下行 H2 + FinalMask。启用分片后使用 `xhttp-client.json` 导入。
 
@@ -198,7 +238,7 @@ xhttp_alpn=h2 xhttp_finalmask=tls-fragment \
 | `agn` / `agk` | 无 | 固定隧道域名 / Tunnel Token，启用 Argo 时必填 |
 | `agproto` | `quic` | 隧道协议：`quic`、`http2` 或 `auto` |
 | `uuid` | 自动生成 | 自定义节点 UUID |
-| `xhttp_mode` | `packet-up` | 本版固定 HTTP 回源只接受此模式 |
+| `xhttp_mode` | `packet-up` | `packet-up`、`stream-up`、`stream-one`；流式模式需 HTTPS / H2 回源 |
 | `xhttp_alpn` | `h2` | 客户端至边缘：`h2` 或 `h3` |
 | `xhttp_address` | `agn` | 客户端连接的域名或优选 IP；不改变上行 Host / SNI |
 | `xhttp_path` | 随机生成并保存 | 以 `/` 开头，只含字母、数字、`/`、`_`、`-`，总长 2–201 字符 |
@@ -227,12 +267,14 @@ xhttp_alpn=h2 xhttp_finalmask=tls-fragment \
 更新脚本或修改部署参数，重新执行本仓库的完整安装命令并追加 `rep`。例如，将仅部署了增强 XHTTP 的安装改回默认 H2、关闭分片与上下行分离：
 
 ```bash
-xhttp_alpn=h2 xhttp_finalmask=off xhttp_download_address='' \
+xhttp_mode=packet-up xhttp_alpn=h2 xhttp_finalmask=off xhttp_download_address='' \
   vxpt=8080 argo=vxpt agn=up.example.com agk='YOUR_TUNNEL_TOKEN' \
   bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh) rep
 ```
 
 `rep` 会重建协议配置，**原有其他协议的端口变量也必须一并带上**。省略高级选项不会将其恢复默认：用 `xhttp_finalmask=off` 关闭上行分片；用 `xhttp_download_address=''` 清除已保存的下行分离设置，并从命令中移除其他下行参数。
+
+在 `packet-up` 与流式模式之间切换时，同时按部署输出更新 Cloudflare 的 HTTP / HTTPS 和 HTTP/2 回源设置。
 
 已有 Xray 文件不会因重新配置而自动替换；从旧版本迁移时运行 `agsbx upx`。从上游随机隧道迁移时，先创建固定隧道，再使用新域名和 Token 重配。
 
@@ -261,7 +303,7 @@ docker run -d --name argosbx-enhanced --restart unless-stopped \
   argosbx-enhanced
 ```
 
-cloudflared 与 Xray 在同一容器内运行。Cloudflare 公开主机名的服务地址仍是 **`http://127.0.0.1:8080`**，不使用网页服务的 `3000` 端口，也无需映射 `8080` 到宿主机。
+cloudflared 与 Xray 在同一容器内运行。默认 Cloudflare 服务地址为 **`http://127.0.0.1:8080`**；添加 `-e xhttp_mode=stream-up` 或 `stream-one` 后改为 **HTTPS**，并应用上方流式回源设置。CA Pool 是**容器内**的 `/root/agsbx/xhttp-origin.crt`。网页服务使用 `3000` 端口；无需映射 `8080` 到宿主机。
 
 通过 `-e xhttp_alpn=h3` 等方式传入高级参数。重建容器时保留 UUID、数据卷及原有环境变量；配置卷挂载在 `/root/agsbx`。
 
@@ -290,13 +332,13 @@ python3 -m http.server 8000 --bind 127.0.0.1
 
 本项目按固定域名与 Token 管理隧道生命周期，并针对这条链路生成 XHTTP 配置。部署、重启、更新都不会退回随机隧道。
 
-**为什么不能选择 `auto`、`stream-up` 或 `stream-one`？**
+**流式模式为什么需要额外设置，为什么不提供 `auto`？**
 
-默认回源是 HTTP/1.1。本地真实传输测试发现 `stream-up` 无法在这条默认链路完成传输，因此本方案限定为 `packet-up`。支持流式上行需要另外设计 HTTP/2 回源；本版本未提供。
+默认 HTTP/1.1 回源无法通过本项目的流式传输测试。现在两种流式模式使用 HTTPS / H2 回源，并提供独立的证书信任配置。使用明确的模式便于让客户端、服务端和 Cloudflare 回源保持一致；`auto` 仍不接受。
 
 **隧道显示在线，但客户端仍无法连接？**
 
-核对公开主机名是否指向正确的 `127.0.0.1:<vxpt>`，域名证书是否有效，以及客户端是否完整保留 ENC、路径和高级字段。使用 systemd 时可通过 `journalctl -u argo -n 100 --no-pager` 查看日志；后台启动方式和 Node 容器的 Tunnel 日志位于 `~/agsbx/argo.log`。
+核对公开主机名是否指向正确的 `127.0.0.1:<vxpt>`，域名证书是否有效，以及客户端是否完整保留 ENC、路径和高级字段。流式模式还需检查 HTTPS、HTTP/2 to origin、CA Pool 和域名 gRPC 开关。使用 systemd 时可通过 `journalctl -u argo -n 100 --no-pager` 查看日志；后台启动方式和 Node 容器的 Tunnel 日志位于 `~/agsbx/argo.log`。
 
 **启用分片后为什么分享链接为空？**
 
@@ -308,7 +350,7 @@ python3 -m http.server 8000 --bind 127.0.0.1
 
 ## 验证范围与项目结构
 
-[自动测试](.github/workflows/test.yml)覆盖参数校验、固定隧道启动、凭据缺失、Token 文件权限、配置导出和生成器命令转义；使用真实 Xray 校验配置，并进行 H2、H3、FinalMask 和上下行分离的本地加密双向传输测试，同时构建 Node 容器。
+[自动测试](.github/workflows/test.yml)覆盖参数校验、固定隧道启动、凭据缺失、证书与 Token 文件权限、配置导出和生成器命令转义；使用真实 Xray 校验配置，并进行三种模式、H2 / H3、FinalMask 和上下行分离的本地加密传输测试。流式测试确认回源协商为 H2，并验证服务端先发送、持续交替收发数据，同时构建 Node 容器。
 
 这些检查保持 TLS 证书校验开启，**不等同于真实 Cloudflare 隧道、目标运营商网络或吞吐性能的验证**。部署后仍需使用自己的域名和客户端完成连接测试。
 

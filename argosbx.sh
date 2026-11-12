@@ -1261,7 +1261,8 @@ rc-update add argo default && rc-service argo restart || exit 1
 else
 nohup "$HOME/agsbx/argo-run" >> "$HOME/agsbx/argo.log" 2>&1 &
 fi
-echo "固定隧道连接器已启动；请在 Cloudflare 将 $agn 指向 http://127.0.0.1:$argoport"
+echo "固定隧道连接器已启动"
+argo_origin_hint || exit 1
 echo "连接状态请检查 cloudflared 日志；域名已填写并不代表连通性验证通过。"
 fi
 sleep 5
@@ -2548,7 +2549,7 @@ exit
 elif [ "$1" = "rep" ]; then
 [ "$argo" = vxpt ] || rm -f "$HOME/agsbx/xhttp-options.json"
 cleandel
-rm -rf "$HOME/agsbx"/{sb.json,xr.json,sbargoym.log,sbargotoken.log,argo.log,argoport.log,cdnym,name,xhttp-client.json,xhttp-uri.txt}
+rm -rf "$HOME/agsbx"/{sb.json,xr.json,sbargoym.log,sbargotoken.log,argo.log,argoport.log,cdnym,name,xhttp-client.json,xhttp-uri.txt,xhttp-tunnel-ingress.json}
 echo "Argosbx重置协议完成，开始更新相关协议变量……" && sleep 2
 echo
 elif [ "$1" = "list" ]; then
