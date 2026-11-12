@@ -92,7 +92,7 @@ def checked_core(directory, config):
 
 def probe_origin(inbound, directory):
     with socket.create_connection(('127.0.0.1', int(inbound['port'])), timeout=3) as conn:
-        if inbound['streamSettings'].get('security') == 'tls':
+        if inbound.get('streamSettings', {}).get('security') == 'tls':
             context = ssl.create_default_context(cafile=str(directory / 'xhttp-origin.crt'))
             context.set_alpn_protocols(['h2'])
             with context.wrap_socket(conn, server_hostname='localhost') as secure:
