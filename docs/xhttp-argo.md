@@ -6,7 +6,13 @@
 
 1. 在 Cloudflare Zero Trust 创建**固定隧道**并取得 Token。
 2. 为隧道配置公开主机名，例如 `up.example.com`。服务类型为 **HTTP**，地址为 `127.0.0.1:8080`。域名须由该隧道提供服务并有有效的 Cloudflare 边缘证书。
-3. 在 Linux 服务器运行，替换域名和 Token：
+3. 在 Linux 服务器的终端运行以下命令，选择「首次安装向导」，依次填写域名、隐藏输入的 Token、端口和传输方案：
+
+```bash
+bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)
+```
+
+向导默认 H2 / `packet-up` 和端口 `8080`；选择流式方案后按下文调整 Cloudflare 回源。自动部署仍可直接传参，替换域名和 Token：
 
 ```bash
 vxpt=8080 argo=vxpt agn=up.example.com agk='你的固定隧道Token' \
@@ -31,7 +37,15 @@ xhttp_mode=stream-up xhttp_alpn=h2 \
   bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)
 ```
 
-将 `xhttp_mode=stream-up` 改为 `xhttp_mode=stream-one` 可使用单请求双向流。修改已有安装时追加 `rep`，并保留其他协议参数；若之前存在下行分离配置，切换 `stream-one` 时显式传入 `xhttp_download_address=''`。
+将 `xhttp_mode=stream-up` 改为 `xhttp_mode=stream-one` 可使用单请求双向流。已有增强 XHTTP 安装可用以下命令切换，不必重建其他协议：
+
+```bash
+agsbx mode stream-up --dry-run           # 只预览
+agsbx mode stream-up                     # 自动采用 H2
+agsbx mode stream-one --disable-split    # 显式关闭下行分离
+```
+
+应用前校验服务端与客户端，备份原配置后重启 Xray；失败则恢复原配置并尝试重启原服务。UUID、端口、密钥、路径、其他协议和路由规则保留。同一 Xray 进程上的连接会短暂重连。
 
 主脚本和 Node 容器会自动：
 
@@ -60,11 +74,13 @@ xhttp_mode=stream-up xhttp_alpn=h2 \
 
 还需在该域名的 Network 设置中开启 gRPC。Tunnel Token 只用于运行连接器；脚本不会将其当作账户 API Token，也不会自动修改远端路由或域名设置。保存设置后，重新导入生成的客户端 JSON 并实际连接。
 
-本方案补齐了流式模式所需的本机 HTTPS / H2 链路，但 Cloudflare 官方仍注明**公开主机名上的 gRPC 不在支持范围内**。Xray 的 gRPC 请求头兼容技巧不等于 Cloudflare 对其提供保障；两种模式均标为实验性。若仍然不通，可以回退 `xhttp_mode=packet-up`，并将远端服务改回 HTTP、关闭 HTTP/2 to origin。
+本方案补齐了流式模式所需的本机 HTTPS / H2 链路，但 Cloudflare 官方仍注明**公开主机名上的 gRPC 不在支持范围内**。Xray 的 gRPC 请求头兼容技巧不等于 Cloudflare 对其提供保障；两种模式均标为实验性。若仍然不通，可以运行 `agsbx mode packet-up --alpn h2`，并将远端服务改回 HTTP、关闭 HTTP/2 to origin。
 
 参考：[Cloudflare HTTP/2 回源](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/#http2origin)、[Cloudflare gRPC 限制](https://developers.cloudflare.com/network/grpc-connections/)、[Xray 流式模式说明](https://github.com/XTLS/Xray-core/discussions/4113)。
 
 ## 导入客户端
+
+运行 `agsbx export ~/xhttp-client.json` 可把完整配置导出到指定文件；默认导出到当前目录，文件权限为 `600`。`agsbx export --uri` 显示分享链接，但启用 FinalMask 时会要求使用 JSON。
 
 运行 `agsbx list` 会重新生成：
 
@@ -77,6 +93,31 @@ xhttp_mode=stream-up xhttp_alpn=h2 \
 | `~/agsbx/xhttp-tunnel-ingress.json` | 单条固定隧道路由的回源设置，需自行应用到 Cloudflare |
 
 **启用任一方向的 FinalMask 时只导出 JSON，`xhttp-uri.txt` 留空**。普通 VLESS URI 无统一的顶层 `streamSettings.finalmask` 字段，不能把缺少分片设置的 URI 当作完整配置。Clash/Mihomo/Sing-box 的原有订阅不会被塞入不兼容的高级 Xray 节点；请使用 Xray 自定义 JSON 导入。
+
+## 日常管理与升级
+
+直接运行 `agsbx` 打开菜单；无交互终端且没有传入协议变量时只显示帮助，不会自动安装。
+
+| 操作 | 命令 |
+| --- | --- |
+| 查看方案与进程状态 | `agsbx status` |
+| 检查配置、进程、本机回源 | `agsbx doctor` |
+| 额外检查公网 TCP/443 与证书 | `agsbx doctor --network` |
+| 显示需要手动同步的 Cloudflare 设置 | `agsbx tunnel` |
+| 查看隐藏已保存凭据后的日志 | `agsbx logs --lines 50` |
+| 更新管理脚本，不重建节点或重启 | `agsbx upgrade` |
+| 重启服务 / 更新 Xray | `agsbx res` / `agsbx upx` |
+
+公网检查不验证 H3、VLESS 加密连接或 Cloudflare 远端路由。检查通过后仍需用客户端连接。
+
+旧版没有这些管理命令时，先执行：
+
+```bash
+bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh) upgrade
+bash "$HOME/bin/agsbx"
+```
+
+升级会先下载并检查管理组件再替换文件，保留节点配置和现有内核。修改端口、协议集合或固定隧道时，仍使用完整环境变量命令加 `rep`。
 
 ## 组合参数
 
@@ -192,7 +233,7 @@ Node 入口与主脚本共享配置生成器；初始化失败时容器退出。
 
 ## 验证范围
 
-自动测试覆盖配置生成、URL 编码、XMUX 冲突、凭据缺失、禁止随机隧道、证书和 Token 文件权限及固定启动器。使用真实 Xray v26.11.9 校验服务端和客户端配置；三种模式、本地 H2 反向代理、H3、FinalMask、上下行分离均测试加密传输，保持客户端与回源的 TLS 证书校验开启。
+自动测试覆盖配置生成、URL 编码、XMUX 冲突、凭据缺失、禁止随机隧道、证书和 Token 文件权限及固定启动器；同时检查终端向导的隐藏输入、无交互防误安装、脚本升级、模式切换与失败恢复、订阅去重和日志脱敏。Linux CI 使用真实 Xray 验证模式切换和服务重启。使用真实 Xray v26.11.9 校验服务端和客户端配置；三种模式、本地 H2 反向代理、H3、FinalMask、上下行分离均测试加密传输，保持客户端与回源的 TLS 证书校验开启。
 
 流式测试的代理要求回源实际协商到 HTTP/2，避免把 HTTP/1.1 降级误判为成功。除整段上传下载外，还测试服务端先发送数据、客户端收到每段响应后才发送下一段，确保请求未结束时也能双向传输。`stream-one` 与分离冲突会在停止原服务前结合已保存参数检查。
 

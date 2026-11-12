@@ -8,9 +8,11 @@
 
 传输模式支持默认的 `packet-up`，以及通过 **HTTPS + HTTP/2 回源**实现的实验性 `stream-up` / `stream-one`。后两种模式需要同步调整 Cloudflare 的回源设置，详见[流式模式](#流式模式实验性)。
 
+在终端直接运行 **`agsbx` 打开管理菜单**。首次安装有向导，日常可用 `status` 查看状态、`mode` 切换方案、`doctor` 排查连接、`export` 导出客户端，原有环境变量命令继续可用。
+
 > **本项目的所有 Argo 入口只支持固定隧道。** 必须同时提供固定域名和 Tunnel Token；缺失时停止部署，不创建或恢复 `trycloudflare.com` 随机隧道。VMess / VLESS WebSocket 的 Argo 入口同样遵守这一规则。
 
-[快速部署](#快速部署) · [客户端导入](#客户端导入) · [增强组合](#增强组合) · [参数参考](#参数参考) · [Docker 部署](#docker-部署) · [常见问题](#常见问题)
+[快速部署](#快速部署) · [客户端导入](#客户端导入) · [增强组合](#增强组合) · [管理与更新](#管理与更新) · [参数参考](#参数参考) · [Docker 部署](#docker-部署) · [常见问题](#常见问题)
 
 ## 功能与适用入口
 
@@ -78,7 +80,15 @@ flowchart LR
 
 ### 3. 运行安装命令
 
-替换以下域名和 Token，在 Linux 主机的 Bash 中执行：
+在 Linux 主机的交互终端中运行，即可打开菜单，选择「首次安装向导」：
+
+```bash
+bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)
+```
+
+向导依次询问固定域名、Token、本机端口和传输方案。Token 输入不显示；端口默认 `8080`、方案默认 H2 / `packet-up`。确认摘要后开始安装。向导针对首次安装；已有节点请使用下方的 `mode` 或 `upgrade`，不必重建所有协议。
+
+自动部署或习惯直接传参时，替换以下域名和 Token 执行：
 
 ```bash
 vxpt=8080 argo=vxpt agn=up.example.com agk='YOUR_TUNNEL_TOKEN' \
@@ -94,6 +104,8 @@ bash "$HOME/bin/agsbx" list
 ```
 
 连接器启动只代表进程已启动。请检查 Cloudflare 中的隧道状态，再导入客户端实际测试连接。
+
+无交互终端且未提供参数时，脚本只显示帮助，不会等待输入或开始安装。
 
 ## 流式模式（实验性）
 
@@ -111,7 +123,7 @@ xhttp_mode=stream-up xhttp_alpn=h2 \
   bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)
 ```
 
-使用 `stream-one` 时，将 `xhttp_mode` 改为 `stream-one`，且不配置下行分离。已有安装在命令末尾加 `rep`；如果之前启用过分离，还需传入 `xhttp_download_address=''` 清除旧设置。
+使用 `stream-one` 时，将 `xhttp_mode` 改为 `stream-one`，且不配置下行分离。已有增强 XHTTP 安装可直接用 `agsbx mode stream-up`；切到单请求模式用 `agsbx mode stream-one --disable-split`。这两个命令自动使用 H2，并保留其他协议与现有端口、UUID、密钥和路径。
 
 脚本自动生成并保存 `~/agsbx/xhttp-origin.crt` 和 `~/agsbx/xhttp-origin.key`。然后在**固定隧道的公开主机名**上应用以下设置：
 
@@ -130,7 +142,7 @@ xhttp_mode=stream-up xhttp_alpn=h2 \
 
 Cloudflare 官方目前仍将公开主机名上的 gRPC 列为未支持场景，因此这里提供的是经过本地真实传输验证的**实验性配置**，不能保证每条 Cloudflare 线路都可用。[Cloudflare 限制说明](https://developers.cloudflare.com/network/grpc-connections/)、[HTTP/2 回源参数](https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/origin-parameters/#http2origin)。
 
-回退时显式设置 `xhttp_mode=packet-up` 重配，并将 Cloudflare Service 改回 **HTTP**、关闭 HTTP/2 to origin。修改脚本模式后，远程回源设置必须同步修改。
+回退时运行 `agsbx mode packet-up --alpn h2`，并将 Cloudflare Service 改回 **HTTP**、关闭 HTTP/2 to origin。修改脚本模式后，远程回源设置必须同步修改。
 
 ## 客户端导入
 
@@ -143,6 +155,8 @@ Cloudflare 官方目前仍将公开主机名上的 gRPC 列为未支持场景，
 | `~/agsbx/xhttp-tunnel-ingress.json` | 当前固定隧道路由需要应用的回源设置 |
 
 运行 `agsbx list` 可重新导出配置。文件包含节点凭据，应作为私有配置保存。
+
+也可运行 `agsbx export ~/xhttp-client.json` 直接导出到指定位置；省略路径时写入当前目录的 `xhttp-client.json`。输出文件权限为 `600`，指定目标文件存在时会覆盖。`agsbx export --uri` 仅显示分享链接；不会把缺少 FinalMask 设置的链接当作完整配置。
 
 **只要任一方向启用 FinalMask，就必须使用完整 JSON。** 此时 `xhttp-uri.txt` 留空，避免生成缺少分片设置的链接。支持普通 VLESS 链接，不代表支持这些高级字段。
 
@@ -257,6 +271,19 @@ xhttp_alpn=h2 xhttp_finalmask=tls-fragment \
 
 | 命令 | 作用 |
 | --- | --- |
+| `agsbx` / `agsbx menu` | 交互式管理菜单 |
+| `agsbx help` | 查看命令与参数示例 |
+| `agsbx setup` | 首次安装向导；可加 `--dry-run` 只预览 |
+| `agsbx status` | 查看进程、固定域名和当前方案，不显示凭据 |
+| `agsbx doctor` | 检查配置、进程和本机回源，不修改服务 |
+| `agsbx doctor --network` | 额外检查公网域名的 TCP/443 与 TLS 证书 |
+| `agsbx mode stream-up` | 保留其他协议，切换为 H2 流式上行 |
+| `agsbx mode stream-one --disable-split` | 关闭下行分离，切换为 H2 单请求双向流 |
+| `agsbx mode packet-up --alpn h3 --finalmask off` | 切换 H3 分包模式并关闭不兼容的上行分片 |
+| `agsbx tunnel` | 显示 Cloudflare 应填写的回源配置 |
+| `agsbx export [目标文件]` | 导出完整客户端 JSON |
+| `agsbx logs --lines 50` | 查看最近日志，隐藏已保存的 Token 等凭据 |
+| `agsbx upgrade` | 更新管理脚本与组件，保留节点配置，不更新内核 |
 | `agsbx list` | 查看节点并重新导出客户端配置 |
 | `agsbx res` | 重启服务 |
 | `agsbx upx` | 更新 Xray；当前组件目标版本为 v26.11.9 |
@@ -264,7 +291,18 @@ xhttp_alpn=h2 xhttp_finalmask=tls-fragment \
 | `agsbx upa` | 更新 cloudflared，继续使用已保存的固定隧道 |
 | `agsbx del` | 卸载服务和配置 |
 
-更新脚本或修改部署参数，重新执行本仓库的完整安装命令并追加 `rep`。例如，将仅部署了增强 XHTTP 的安装改回默认 H2、关闭分片与上下行分离：
+`mode` 可加 `--dry-run` 预览变更。应用前先校验新服务端和客户端配置，保存备份到 `~/agsbx/backups/`，再只重启 Xray；启动失败会恢复原配置并尝试重启原服务。其他入站与出站规则保留，但同一 Xray 进程中的连接会短暂重连。新配置导出后，聚合订阅中的增强节点也会更新，重复导出不再重复添加。
+
+**从旧版升级而不重建节点：**
+
+```bash
+bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh) upgrade
+bash "$HOME/bin/agsbx"
+```
+
+`upgrade` 不会重启服务。旧内核需要单独运行 `agsbx upx`；在本版安装后可以直接使用 `agsbx upgrade` 更新管理脚本。
+
+修改端口、增加协议或更换固定隧道等完整部署参数，仍使用原有完整命令并追加 `rep`。例如，将仅部署了增强 XHTTP 的安装重建为 H2、关闭分片与上下行分离：
 
 ```bash
 xhttp_mode=packet-up xhttp_alpn=h2 xhttp_finalmask=off xhttp_download_address='' \
@@ -352,6 +390,8 @@ python3 -m http.server 8000 --bind 127.0.0.1
 
 [自动测试](.github/workflows/test.yml)覆盖参数校验、固定隧道启动、凭据缺失、证书与 Token 文件权限、配置导出和生成器命令转义；使用真实 Xray 校验配置，并进行三种模式、H2 / H3、FinalMask 和上下行分离的本地加密传输测试。流式测试确认回源协商为 H2，并验证服务端先发送、持续交替收发数据，同时构建 Node 容器。
 
+管理命令还测试终端隐藏输入、无交互防误安装、升级前校验、模式切换与失败恢复、订阅去重、凭据脱敏；Linux CI 运行真实 Xray 的切换和重启检查。
+
 这些检查保持 TLS 证书校验开启，**不等同于真实 Cloudflare 隧道、目标运营商网络或吞吐性能的验证**。部署后仍需使用自己的域名和客户端完成连接测试。
 
 | 路径 | 职责 |
@@ -359,6 +399,7 @@ python3 -m http.server 8000 --bind 127.0.0.1
 | [argosbx.sh](argosbx.sh) | 主机安装和管理 |
 | [lib/argo.sh](lib/argo.sh) | 固定隧道校验、凭据保存和启动 |
 | [lib/xhttp_config.py](lib/xhttp_config.py) | XHTTP 参数处理、配置生成、导出和 Xray 下载校验 |
+| [lib/manage.py](lib/manage.py) | 安装向导、诊断、模式切换与失败恢复 |
 | [index.html](index.html) / [generator-enhanced.js](generator-enhanced.js) | 网页命令生成器 |
 | [container/nodejs](container/nodejs) | 增强容器入口 |
 | [tests](tests) | 配置与传输回归测试 |

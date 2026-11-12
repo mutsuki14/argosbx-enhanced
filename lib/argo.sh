@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Shared by the VPS installer and the Node container entry point.
 ARGOSBX_STATE_DIR=${ARGOSBX_STATE_DIR:-$HOME/agsbx}
+ARGOSBX_CLI_REV=1
 
 argo_error() { printf 'Argo 配置错误：%s\n' "$*" >&2; return 1; }
 
@@ -36,7 +37,7 @@ argo_validate() {
     export agproto
 }
 
-argo_python() {
+argo_require_python() {
     if ! command -v python3 >/dev/null 2>&1; then
         if [ "$EUID" -ne 0 ]; then
             argo_error 'XHTTP 增强配置需要 Python 3，请先安装 python3'; return 1
@@ -50,19 +51,126 @@ argo_python() {
             argo_error '请先安装 python3'; return 1
         fi
     fi
+}
+
+argo_component() {
+    local name=$1
+    case "$name" in xhttp_config.py|manage.py) ;; *) return 1 ;; esac
     local helper_dir
     helper_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
-    if [ ! -s "$helper_dir/xhttp_config.py" ]; then
+    if [ ! -s "$helper_dir/$name" ]; then
         local pending
-        pending=$(mktemp "$helper_dir/xhttp.XXXXXX") || return 1
-        if (command -v curl >/dev/null 2>&1 && curl -fLsS --retry 2 "$ARGOSBX_BASE/lib/xhttp_config.py" -o "$pending") ||
-           (command -v wget >/dev/null 2>&1 && wget -qO "$pending" "$ARGOSBX_BASE/lib/xhttp_config.py"); then
-            mv "$pending" "$helper_dir/xhttp_config.py"
+        pending=$(mktemp "$helper_dir/component.XXXXXX") || return 1
+        if (command -v curl >/dev/null 2>&1 && curl -fLsS --connect-timeout 10 --max-time 60 --retry 2 "$ARGOSBX_BASE/lib/$name" -o "$pending") ||
+           (command -v wget >/dev/null 2>&1 && wget -T 30 -qO "$pending" "$ARGOSBX_BASE/lib/$name"); then
+            mv "$pending" "$helper_dir/$name"
         else
             rm -f "$pending"; argo_error '无法下载 XHTTP 配置组件'; return 1
         fi
     fi
-    python3 "$helper_dir/xhttp_config.py" "$@"
+    printf '%s\n' "$helper_dir/$name"
+}
+
+argo_python() {
+    argo_require_python || return 1
+    local component
+    component=$(argo_component xhttp_config.py) || return 1
+    python3 "$component" "$@"
+}
+
+argo_manage() {
+    if [ "${1:-}" = setup ] && [ ! -t 0 ]; then
+        echo '安装向导需要交互终端；自动部署请继续使用环境变量命令，运行 agsbx help 查看示例。' >&2
+        return 1
+    fi
+    if [ "${1:-}" = setup ] || [ "${1:-}" = upgrade ]; then
+        argo_require_python || return 1
+    elif ! command -v python3 >/dev/null 2>&1; then
+        printf '此命令需要 Python 3；首次安装请运行 agsbx setup。\n' >&2
+        return 1
+    fi
+    local component
+    argo_component xhttp_config.py >/dev/null || return 1
+    component=$(argo_component manage.py) || return 1
+    ARGOSBX_STATE_DIR="$ARGOSBX_STATE_DIR" python3 "$component" "$@"
+}
+
+agsbx_help() {
+    cat <<'HELP'
+Argosbx Enhanced — 固定 Argo / XHTTP
+
+  agsbx                         打开菜单（终端中）
+  agsbx setup [--dry-run]        首次安装向导；Token 输入不显示
+  agsbx status                  查看本机状态，不显示凭据
+  agsbx upgrade                 更新管理脚本，保留节点配置
+  agsbx doctor [--network]       检查配置、进程、回源；可选公网 TLS 检查
+  agsbx mode stream-up           保留其他协议，切换为 H2 流式上行
+  agsbx mode stream-one --disable-split
+                                关闭分离，切换为 H2 单请求双向流
+  agsbx mode packet-up --alpn h2 恢复分包传输
+    可加 --dry-run 预览，--finalmask off|tls-fragment 调整上行分片
+  agsbx tunnel                  查看 Cloudflare 应填写的回源设置
+  agsbx export [目标文件]        导出 JSON，默认 ./xhttp-client.json
+  agsbx export --uri            显示分享链接（FinalMask 请用 JSON）
+  agsbx logs [--lines 50]        查看脱敏日志
+  agsbx list / res               原有节点列表 / 重启全部服务
+  agsbx upx / ups / upa          更新 Xray / Sing-box / cloudflared
+  agsbx rep                      按完整环境变量重建协议
+  agsbx del                      卸载服务和配置
+  agsbx help                     显示此帮助
+
+原环境变量安装方式继续支持：
+  vxpt=8080 argo=vxpt agn=up.example.com agk='TOKEN' bash argosbx.sh
+stream-up/one 为实验性支持，切换后仍需同步 Cloudflare 回源设置。
+HELP
+}
+
+agsbx_menu() {
+    [ -t 0 ] || { echo '菜单需要交互终端；运行 agsbx help 查看命令。' >&2; return 2; }
+    local choice profile
+    while :; do
+        printf '\nArgosbx Enhanced\n1) 首次安装向导  2) 查看状态  3) 切换传输方案\n4) 检查连接配置  5) Cloudflare 回源设置\n6) 导出客户端 JSON  7) 查看日志  8) 完整帮助\n9) 更新管理脚本  0) 退出\n'
+        read -r -p '请选择 [0]：' choice || return 0
+        case "${choice:-0}" in
+            0) return 0 ;;
+            1) argo_manage setup ;;
+            2) argo_manage status ;;
+            3)
+                printf '1) H2 分包  2) H3 分包（关闭上行分片）\n3) H2 stream-up  4) H2 stream-one（关闭下行分离）\n'
+                read -r -p '选择方案 [返回]：' profile || return 0
+                case "$profile" in
+                    1) argo_manage mode packet-up --alpn h2 ;;
+                    2) argo_manage mode packet-up --alpn h3 --finalmask off ;;
+                    3) argo_manage mode stream-up ;;
+                    4) argo_manage mode stream-one --disable-split ;;
+                    '') ;;
+                    *) echo '请输入 1–4。' ;;
+                esac ;;
+            4) argo_manage doctor ;;
+            5) argo_manage tunnel ;;
+            6) argo_manage export ;;
+            7) argo_manage logs ;;
+            8) agsbx_help ;;
+            9) argo_manage upgrade ;;
+            *) echo '请输入菜单中的数字。' ;;
+        esac
+    done
+}
+
+argo_cli_dispatch() {
+    case "${1:-}" in
+        help|-h|--help) agsbx_help; exit 0 ;;
+        menu) agsbx_menu; exit $? ;;
+        setup|upgrade|status|doctor|mode|tunnel|export|logs) argo_manage "$@"; exit $? ;;
+        list|rep|res|upx|ups|upa|del) return 0 ;;
+        '')
+            local variable
+            for variable in vlpt vmpt vwpt hypt tupt xhpt vxpt anpt arpt sspt sopt nvpt xupt xcpt; do
+                [ -z "${!variable+x}" ] || return 0
+            done
+            if [ -t 0 ]; then agsbx_menu; exit $?; else agsbx_help; exit 0; fi ;;
+        *) printf '未知命令：%s。运行 agsbx help 查看用法。\n' "$1" >&2; exit 2 ;;
+    esac
 }
 
 argo_preflight() {
@@ -150,5 +258,5 @@ argo_xhttp_export() {
         argo_error '客户端配置校验失败，请升级 Xray 内核（FinalMask 需要支持该功能的版本）'; return 1;
     }
     printf '%s\n' "$summary"
-    cat "$ARGOSBX_STATE_DIR/xhttp-uri.txt" >> "$1"
+    argo_python subscribe "$ARGOSBX_STATE_DIR" "$1" "$ARGOSBX_STATE_DIR/jh.txt"
 }

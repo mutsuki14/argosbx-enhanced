@@ -164,6 +164,16 @@ def json_file(path, value):
     write_private(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 
+def update_subscription(path, uri):
+    path = Path(path)
+    lines = path.read_text().splitlines() if path.exists() else []
+    lines = [line for line in lines if not (line.startswith('vless://') and
+             line.rsplit('#', 1)[-1] == 'vless-xhttp-argo-tls-enc')]
+    if uri.strip():
+        lines.append(uri.strip())
+    write_private(path, '\n'.join(lines) + ('\n' if lines else ''))
+
+
 def saved_options(directory, env):
     saved = Path(directory) / "xhttp-options.json"
     return options(env, json.loads(saved.read_text()) if saved.exists() else None)
@@ -249,12 +259,9 @@ def stream(opts, domain, download=False):
     return result
 
 
-def configure(directory, env):
-    directory = Path(directory)
-    saved = directory / "xhttp-options.json"
-    opts = saved_options(directory, env)
-    config_file = directory / "xr.json"
-    config = json.loads(config_file.read_text())
+def server_config(config, opts, directory):
+    """Render the XHTTP inbound without changing other protocols or the live JSON."""
+    config = copy.deepcopy(config)
     inbound = next((x for x in config["inbounds"] if x.get("tag") == "vless-xhttp"), None)
     require(inbound is not None, "未找到 vless-xhttp 入站")
     require(inbound["settings"].get("decryption", "none") not in ("", "none"), "VLESS ENC 密钥生成失败")
@@ -271,6 +278,15 @@ def configure(directory, env):
         # A single bidirectional gRPC-like request must not receive an SSE content type.
         inbound["streamSettings"]["xhttpSettings"]["extra"] = {
             "noSSEHeader": opts["mode"] == "stream-one"}
+    return config
+
+
+def configure(directory, env):
+    directory = Path(directory)
+    saved = directory / "xhttp-options.json"
+    opts = saved_options(directory, env)
+    config_file = directory / "xr.json"
+    config = server_config(json.loads(config_file.read_text()), opts, directory)
     json_file(config_file, config)
     json_file(saved, opts)
 
@@ -326,6 +342,10 @@ def main():
             export(sys.argv[2])
         elif command == "origin-info":
             origin_info(sys.argv[2])
+        elif command == "subscribe":
+            uri = (Path(sys.argv[2]) / "xhttp-uri.txt").read_text()
+            for path in set(sys.argv[3:]):
+                update_subscription(path, uri)
         elif command == "install-xray":
             install_xray(sys.argv[2])
         else:

@@ -1,6 +1,7 @@
 #!/bin/bash
 export LANG=en_US.UTF-8
 # Keep the helper and self-update source on this fork.
+export ARGOSBX_ENTRY="${BASH_SOURCE[0]}"
 export ARGOSBX_REF=${ARGOSBX_REF:-main}
 export ARGOSBX_BASE="https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/$ARGOSBX_REF"
 _agsbx_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
@@ -10,18 +11,20 @@ elif [ -s "$_agsbx_dir/../../lib/argo.sh" ]; then
     . "$_agsbx_dir/../../lib/argo.sh"
 else
     mkdir -p "$HOME/agsbx/lib"
-    if [ ! -s "$HOME/agsbx/lib/argo.sh" ] || [ "${1:-}" = rep ]; then
+    if [ ! -s "$HOME/agsbx/lib/argo.sh" ] || [ "${1:-}" = rep ] ||
+       ! grep -q "^ARGOSBX_CLI_REV=1$" "$HOME/agsbx/lib/argo.sh"; then
         _agsbx_tmp=$(mktemp "$HOME/agsbx/lib/argo.XXXXXX") || exit 1
         if (command -v curl >/dev/null 2>&1 && curl -fLsS --retry 2 "$ARGOSBX_BASE/lib/argo.sh" -o "$_agsbx_tmp") ||
            (command -v wget >/dev/null 2>&1 && wget -qO "$_agsbx_tmp" "$ARGOSBX_BASE/lib/argo.sh"); then
             mv "$_agsbx_tmp" "$HOME/agsbx/lib/argo.sh"
-            rm -f "$HOME/agsbx/lib/xhttp_config.py"
+            rm -f "$HOME/agsbx/lib/xhttp_config.py" "$HOME/agsbx/lib/manage.py"
         else
             rm -f "$_agsbx_tmp"; echo '无法下载固定隧道组件' >&2; exit 1
         fi
     fi
     . "$HOME/agsbx/lib/argo.sh"
 fi
+argo_cli_dispatch "$@"
 argo_preflight "${1:-}" || exit 1
 mkdir -p "$HOME/agsbx"
 url="$ARGOSBX_BASE/argosbx.sh"
@@ -91,27 +94,12 @@ export oap=${oap:-''}
 v46url="https://icanhazip.com"
 agsbxurl="$ARGOSBX_BASE/argosbx.sh"
 showmode(){
-[ -s "$HOME/agsbx/sh.txt" ] && echo "上次输入的脚本（Token 已隐藏）：$(cat "$HOME/agsbx/sh.txt")"
-echo "Argosbx脚本一键SSH命令生器在线网址：https://github.com/mutsuki14/argosbx-enhanced"
-echo "主脚本：bash <(curl -Ls $ARGOSBX_BASE/argosbx.sh) 或 bash <(wget -qO- $ARGOSBX_BASE/argosbx.sh)"
-echo "显示节点信息命令：agsbx list 【或者】 主脚本 list"
-echo "重置变量组命令：自定义各种协议变量组 agsbx rep 【或者】 自定义各种协议变量组 主脚本 rep"
-echo "更新脚本命令：原已安装的自定义各种协议变量组 主脚本 rep"
-echo "更新Xray或Singbox或者CF隧道的内核命令：agsbx upx或ups或upa 【或者】 主脚本 upx或ups或upa"
-echo "重启脚本命令：agsbx res 【或者】 主脚本 res"
-echo "卸载脚本命令：agsbx del 【或者】 主脚本 del"
-echo "双栈VPS显示IPv4/IPv6节点配置命令：ippz=4或6 agsbx list 【或者】 ippz=4或6 主脚本 list"
-echo "申请本地IP域名证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)"
-echo "---------------------------------------------------------"
-echo
+echo "日常管理：agsbx（菜单） | agsbx status | agsbx doctor | agsbx help"
+echo "切换模式：agsbx mode stream-up；导出配置：agsbx export"
+echo "完整参数重配仍使用 rep；固定隧道回源说明：agsbx tunnel"
+echo "项目文档：https://github.com/mutsuki14/argosbx-enhanced"
 }
-echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
-echo "甬哥Github项目 ：github.com/yonggekkk"
-echo "甬哥Blogger博客 ：ygkkk.blogspot.com"
-echo "甬哥YouTube频道 ：www.youtube.com/@ygkkk"
-echo "Argosbx一键无交互小钢炮脚本💣"
-echo "当前版本：V26.11.12-enhanced"
-echo "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~"
+printf '\nArgosbx Enhanced | 固定 Argo / XHTTP\n'
 hostname=$(uname -a | awk '{print $2}')
 op=$(cat /etc/redhat-release 2>/dev/null || cat /etc/os-release 2>/dev/null | grep -i pretty_name | cut -d \" -f2)
 [ -z "$(systemd-detect-virt 2>/dev/null)" ] && vi=$(virt-what 2>/dev/null) || vi=$(systemd-detect-virt 2>/dev/null)
@@ -120,8 +108,8 @@ arm64|aarch64) cpu=arm64;;
 amd64|x86_64) cpu=amd64;;
 *) echo "目前脚本不支持$(uname -m)架构" && exit
 esac
-if [ "$1" != "del" ]; then
-if [ ! -f sbx_update ]; then
+case "${1:-}" in list|res|upx|ups|upa|del) ;; *)
+if [ ! -f "$HOME/agsbx/.deps-installed" ]; then
 echo "执行必要的脚本依赖中，请稍等10秒……"
 if command -v apk >/dev/null 2>&1; then
 apk update >/dev/null 2>&1 && apk add --no-cache bash busybox-extras gcompat libc6-compat iptables openssl >/dev/null 2>&1
@@ -130,9 +118,9 @@ export DEBIAN_FRONTEND=noninteractive
 printf 'iptables-persistent iptables-persistent/autosave_v4 boolean true\niptables-persistent iptables-persistent/autosave_v6 boolean true\n' | debconf-set-selections
 apt update >/dev/null 2>&1 && apt install -y busybox coreutils util-linux iptables iptables-persistent cron openssl >/dev/null 2>&1
 fi
-touch sbx_update
+touch "$HOME/agsbx/.deps-installed"
 fi
-fi
+;; esac
 v4v6(){
 v4=$( (command -v curl >/dev/null 2>&1 && curl -s4m5 -k "$v46url" 2>/dev/null) || (command -v wget >/dev/null 2>&1 && timeout 3 wget -4 --tries=2 -qO- "$v46url" 2>/dev/null) )
 v6=$( (command -v curl >/dev/null 2>&1 && curl -s6m5 -k "$v46url" 2>/dev/null) || (command -v wget >/dev/null 2>&1 && timeout 3 wget -6 --tries=2 -qO- "$v46url" 2>/dev/null) )
@@ -2180,7 +2168,7 @@ vwa_link2="vless://$uuid@$cdnip2:80?encryption=$enkey&flow=xtls-rprx-vision&type
 echo "$vwa_link2" >> "$HOME/agsbx/jhsub.txt"
 elif [ "$vlvm" = "Vlessx" ]; then
 vlvmvx='Vless-xhttp'
-argo_xhttp_export "$HOME/agsbx/jh.txt" || return 1
+argo_xhttp_export "$HOME/agsbx/jhsub.txt" || return 1
 vwatls_link1=$(cat "$HOME/agsbx/xhttp-uri.txt")
 vwa_link2='XHTTP 固定隧道仅导出 TLS；高级组合请使用 xhttp-client.json'
 fi
@@ -2576,22 +2564,12 @@ argo_restart || exit 1
 echo "Cloudflared-argo内核更新完成" && sleep 2 && cip
 exit
 elif [ "$1" = "res" ]; then
+[ ! -s "$HOME/agsbx/xr.json" ] || xrestart || exit 1
+[ ! -s "$HOME/agsbx/sb.json" ] || sbrestart || exit 1
 for P in /proc/[0-9]*; do
 [ -L "$P/exe" ] || continue
 TARGET=$(readlink -f "$P/exe" 2>/dev/null) || continue
-case "$TARGET" in
-*"/agsbx/s"*)
-kill "$(basename "$P")" 2>/dev/null
-sbrestart
-;;
-*"/agsbx/x"*)
-kill "$(basename "$P")" 2>/dev/null
-xrestart
-;;
-*"/agsbx/c"*)
-kill "$(basename "$P")" 2>/dev/null
-;;
-esac
+case "$TARGET" in *"/agsbx/c"*) kill "$(basename "$P")" 2>/dev/null ;; esac
 done
 [ ! -f "$HOME/agsbx/argoport.log" ] || argo_restart || exit 1
 sleep 5 && echo "重启完成" && sleep 3 && cip
