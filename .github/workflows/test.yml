@@ -21,6 +21,7 @@ jobs:
           bash -n lib/argo.sh
           node --check container/nodejs/index.js
           node --check generator-enhanced.js
+          node --check generator-ui.js
           node tests/test_generator.js
           git diff --check
       - name: Install verified Xray test binary

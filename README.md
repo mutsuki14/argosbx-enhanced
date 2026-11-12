@@ -429,7 +429,11 @@ Node 服务还提供 `/<UUID>` 普通订阅与 `/<UUID>/xhttp.json` 完整配置
 
 在线访问：**[Argosbx 命令生成器](https://mutsuki14.github.io/argosbx-enhanced/)**。
 
-网页由 GitHub Pages 托管；`main` 中的 `index.html` 或 `generator-enhanced.js` 更新后自动发布。参数校验和命令生成在浏览器中完成，页面不会替你连接服务器或安装代理。
+网页由 GitHub Pages 托管；`main` 中的网页、样式或生成器脚本更新后自动发布。参数校验和命令生成在浏览器中完成，页面不会替你连接服务器或安装代理。
+
+工作台提供双节点、REALITY 直连、固定 Argo 三种预设，按基础连接、传输增强、更多设置组织表单。两种 XHTTP 节点可分别配置传输模式、XMUX、FinalMask、填充与分包参数；Argo 可配置下行分离。保留自定义协议、WARP 和订阅选项。
+
+支持旧命令导入、实时参数检查、命令复制与下载、管理命令和深浅主题。Token、UUID 与订阅密码在预览中隐藏，复制或下载包含完整值；除主题外，填写内容不会自动保存到浏览器，也不会上传。
 
 也可以下载仓库，在仓库根目录运行：
 
@@ -477,7 +481,7 @@ REALITY 同样校验三种传输模式、自定义 XMUX、填充与分片配置�
 | [lib/argo.sh](lib/argo.sh) | 固定隧道校验、凭据保存和启动 |
 | [lib/xhttp_config.py](lib/xhttp_config.py) | XHTTP 参数处理、配置生成、导出和 Xray 下载校验 |
 | [lib/manage.py](lib/manage.py) | 安装向导、诊断、模式切换与失败恢复 |
-| [index.html](index.html) / [generator-enhanced.js](generator-enhanced.js) | 网页命令生成器 |
+| [index.html](index.html) / [styles.css](styles.css) / [generator-ui.js](generator-ui.js) / [generator-enhanced.js](generator-enhanced.js) | 网页工作台、样式、交互与参数校验 |
 | [container/nodejs](container/nodejs) | 增强容器入口 |
 | [tests](tests) | 配置与传输回归测试 |
 | [docs/xhttp-argo.md](docs/xhttp-argo.md) | 固定隧道和组合参数的详细说明 |

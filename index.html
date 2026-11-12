@@ -1,1009 +1,889 @@
 <!doctype html>
 <html lang="zh-CN">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ArgoSBX一键SSH命令生成器-甬哥ygkkk</title>
-  <style>
-    :root {
-      --bg:#0b1020;
-      --card:#121831;
-      --ink:#e9edf7;
-      --sub:#b7c1d9;
-      --line:#263255;
-      --acc:#4f7cff;
-      --ok:#22c55e;
-      --warn:#f59e0b;
-      --err:#ef4444;
-      --input-bg:#0d1430;
-      --button-bg-dark:#1a2346;
-      --button-bg-light:#121a39;
-      --body-bg: linear-gradient(180deg, var(--bg) 0%, #0e1530 100%);
-    }
-    .light-mode {
-      --bg:#ffffff;
-      --card:#ffffff;
-      --ink:#1a202c;
-      --sub:#4a5568;
-      --line:#e2e8f0;
-      --acc:#4f7cff;
-      --ok:#22c55e;
-      --warn:#f59e0b;
-      --err:#ef4444;
-      --input-bg:#ffffff;
-      --button-bg-dark:#e2e8f0;
-      --button-bg-light:#f0f4f9;
-      --body-bg: var(--bg);
-    }
-    * {
-      box-sizing: border-box;
-    }
-    body {
-      margin: 0;
-      background: var(--body-bg);
-      color: var(--ink);
-      font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, "Helvetica Neue", Arial;
-      transition: background-color 0.3s, color 0.3s;
-    }
-    .wrap {
-      max-width: 1450px; 
-      margin: 32px auto;
-      padding: 0 20px;
-    }
-    header {
-      position: relative;
-      margin-bottom: 16px;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      flex-direction: column;
-    }
-    header h1 {
-      font-size: 36px;
-      margin-bottom: 6px;
-      text-align: center;
-    }
-    header p {
-      margin: 0;
-      font-size: 14px;
-      color: var(--sub);
-      line-height: 1.6;
-      max-width: 400px;
-      margin-left: auto;
-      margin-right: auto;
-      text-align: left;
-    }
-    a {
-      color: var(--acc);
-      text-decoration: none;
-    }
-    a:hover {
-      text-decoration: underline;
-    }
-    .grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      grid-template-rows: auto auto auto auto;
-      gap: 20px;
-    }
-    @media (max-width: 1100px) {
-      .grid {
-        grid-template-columns: 1fr;
-        grid-template-rows: auto auto auto auto auto;
-      }
-    }
-    .protocol-port {
-      grid-column: 1;
-      grid-row: 1 / 4;
-    }
-    .outbound-warp {
-      grid-column: 2;
-      grid-row: 1;
-    }
-    .subscription-links {
-      grid-column: 2;
-      grid-row: 2;
-    }
-    .argo-tunnel {
-      grid-column: 2;
-      grid-row: 3;
-    }
-    .shortcut-commands-card {
-      grid-column: 1 / 3;
-      grid-row: 4;
-    }
-    .out {
-      grid-column: 1 / 3;
-      grid-row: 5;
-    }
-    .card {
-      background: rgba(255, 255, 255, .04);
-      backdrop-filter: blur(6px);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 20px;
-      transition: background-color 0.3s, border-color 0.3s;
-    }
-    .light-mode .card {
-      background: var(--card);
-      border-color: var(--line);
-    }
-    .card h2 {
-      margin: 0 0 12px;
-      font-size: 20px;
-      color: var(--ink);
-    }
-    .card h3 {
-      margin: 0 0 12px;
-      font-size: 16px;
-      color: var(--ink);
-    }
-    .protocol-item {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 8px;
-    }
-    .protocol-item label {
-      white-space: nowrap;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    .protocol-item input[type="text"] {
-      flex-grow: 1;
-      min-width: 100px;
-      padding: 10px 12px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--input-bg);
-      color: var(--ink);
-      outline: none;
-      transition: background-color 0.3s, border-color 0.3s, color 0.3s;
-    }
-    .protocol-grid {
-      display: grid;
-      grid-template-columns: auto 1fr; 
-      gap: 10px 16px;
-      align-items: center;
-    }
-    .protocol-grid .protocol-item {
-      margin: 0; 
-    }
-    .row:not(.protocol-port .row) {
-      display: grid;
-      grid-template-columns: 240px 1fr; 
-      gap: 16px;
-      align-items: center;
-      margin: 8px 0;
-    }
-    @media (max-width: 600px) {
-      .row:not(.protocol-port .row) {
-        grid-template-columns: 1fr;
-      }
-    }
-    label {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-    input[type="text"], input[type="number"], select {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid var(--line);
-      border-radius: 10px;
-      background: var(--input-bg);
-      color: var(--ink);
-      outline: none;
-      transition: background-color 0.3s, border-color 0.3s, color 0.3s;
-    }
-    input[disabled], select[disabled] {
-      opacity: .5;
-    }
-    .switch {
-      position: relative;
-      width: 48px;
-      height: 28px;
-      background: #263255;
-      border-radius: 99px;
-      cursor: pointer;
-      transition: .2s;
-    }
-    .light-mode .switch {
-      background: var(--sub);
-    }
-    .switch::after {
-      content: "";
-      position: absolute;
-      inset: 3px auto 3px 3px;
-      width: 22px;
-      border-radius: 50%;
-      background: white;
-      transition: .2s;
-    }
-    .switch.on {
-      background: var(--acc);
-    }
-    .switch.on::after {
-      left: auto;
-      right: 3px;
-    }
-    .pill {
-      display: inline-block;
-      font-size: 12px;
-      padding: 2px 8px;
-      border: 1px solid var(--line);
-      border-radius: 999px;
-      color: var(--sub);
-      margin-left: 6px;
-      transition: border-color 0.3s, color 0.3s;
-    }
-    .actions {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 10px;
-    }
-    button {
-      cursor: pointer;
-      border: 1px solid var(--line);
-      background: linear-gradient(180deg, var(--button-bg-dark), var(--button-bg-light));
-      color: var(--ink);
-      padding: 10px 14px;
-      border-radius: 12px;
-      transition: background 0.3s, color 0.3s, border-color 0.3s;
-    }
-    button.primary {
-      background: linear-gradient(180deg, #4f7cff, #385fdf);
-      border-color: #476de2;
-      color: #fff;
-    }
-    button.ghost {
-      background: transparent;
-    }
-    .out {
-      position: relative;
-    }
-    textarea {
-      width: 100%;
-      min-height: 130px;
-      background: #0a1128;
-      color: #dbeafe;
-      border: 1px dashed #3752a6;
-      border-radius: 12px;
-      padding: 12px;
-      white-space: pre;
-      resize: vertical;
-      transition: background-color 0.3s, border-color 0.3s, color 0.3s;
-    }
-    .light-mode textarea {
-      background: #f0f4f9;
-      color: #1a202c;
-      border-color: #929faf;
-    }
-    .tabs {
-      display: flex;
-      gap: 8px;
-      margin: 0 0 12px;
-    }
-    .tab {
-      padding: 8px 10px;
-      border-radius: 10px;
-      border: 1px solid var(--line);
-      color: var(--sub);
-      cursor: pointer;
-      transition: background-color 0.3s, border-color 0.3s, color 0.3s;
-    }
-    .tab.active {
-      border-color: #5a73c9;
-      color: var(--ink);
-      background: rgba(79, 124, 255, .15);
-    }
-    .shortcut-commands-content {
-      display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 10px;
-      margin-top: 10px;
-    }
-    .shortcut-commands-content p {
-      margin: 0;
-      white-space: nowrap;
-    }
-    .shortcut-commands-content .command-button {
-      background: var(--button-bg-dark);
-      color: var(--ink);
-      padding: 8px 12px;
-      border: 1px solid var(--line);
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 14px;
-      transition: background-color 0.3s, border-color 0.3s, color 0.3s;
-    }
-    .shortcut-commands-content .command-button:hover {
-      background: var(--line);
-    }
-    .input-with-button {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    .input-with-button input[type="text"] {
-      flex: 1;
-    }
-    .input-with-button button {
-      padding: 8px 12px;
-      font-size: 14px;
-      white-space: nowrap;
-      border-radius: 8px;
-    }
-    .protocol-group {
-      margin-bottom: 16px;
-    }
-    .protocol-group.separator {
-      border-bottom: 1px dotted var(--line);
-      padding-bottom: 16px;
-    }
-    .theme-switch {
-      position: absolute;
-      top: 0;
-      right: 0;
-      z-index: 10;
-      padding: 10px;
-    }
-    .theme-switch-icon {
-      width: 24px;
-      height: 24px;
-      cursor: pointer;
-      color: var(--ink);
-      transition: color 0.3s;
-    }
-    .theme-switch-checkbox {
-      display: none;
-    }
-    .theme-switch-label {
-      cursor: pointer;
-    }
-    .command-type-row {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      margin-bottom: 12px;
-    }
-    .command-type-row label {
-      white-space: nowrap;
-      margin: 0;
-    }
-  </style>
-</head>
-<body>
-  <div class="wrap">
-    <header>
-      <div class="theme-switch">
-        <input type="checkbox" id="theme-switch-checkbox" class="theme-switch-checkbox">
-        <label for="theme-switch-checkbox" class="theme-switch-label">
-          <svg class="theme-switch-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-          </svg>
-        </label>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#f5f6f3" />
+    <meta
+      name="description"
+      content="Argosbx Enhanced 配置工作台。配置 XHTTP REALITY 与固定 Argo 双节点，调整 XMUX、FinalMask 和传输模式，在浏览器中生成部署命令。"
+    />
+    <title>Argosbx Enhanced · XHTTP 配置工作台</title>
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Crect width='48' height='48' rx='13' fill='%232b493c'/%3E%3Cpath d='m12 33 12-21 12 21M18 26h12' fill='none' stroke='%23d9f6a4' stroke-width='4' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"
+    />
+    <link rel="stylesheet" href="styles.css?v=2" />
+    <script src="generator-enhanced.js?v=2" defer></script>
+    <script src="generator-ui.js?v=2" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">跳至配置工作台</a>
+    <svg
+      class="icon-library"
+      xmlns="http://www.w3.org/2000/svg"
+      aria-hidden="true"
+    >
+      <symbol id="i-sliders" viewBox="0 0 24 24">
+        <path d="M4 7h9m4 0h3M4 17h3m4 0h9M13 4v6M7 14v6" />
+      </symbol>
+      <symbol id="i-terminal" viewBox="0 0 24 24">
+        <path d="m5 7 5 5-5 5m8 0h6" />
+      </symbol>
+      <symbol id="i-book" viewBox="0 0 24 24">
+        <path
+          d="M12 5v15m0-15C8 2 3 4 3 4v14s5-2 9 2c4-4 9-2 9-2V4s-5-2-9 1Z"
+        />
+      </symbol>
+      <symbol id="i-arrow" viewBox="0 0 24 24">
+        <path d="M5 12h14m-6-6 6 6-6 6" />
+      </symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24">
+        <rect x="8" y="8" width="12" height="12" rx="2" />
+        <path d="M16 8V4H4v12h4" />
+      </symbol>
+      <symbol id="i-check" viewBox="0 0 24 24">
+        <path d="m5 12 4 4L19 6" />
+      </symbol>
+      <symbol id="i-cloud" viewBox="0 0 24 24">
+        <path d="M7 18a5 5 0 0 1-1-10 7 7 0 0 1 13 2 4 4 0 0 1-1 8Z" />
+      </symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24">
+        <path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z" />
+        <path d="m8 12 3 3 5-6" />
+      </symbol>
+      <symbol id="i-layers" viewBox="0 0 24 24">
+        <path d="m12 3 10 5-10 5L2 8Zm-9 9 9 5 9-5m-18 5 9 5 9-5" />
+      </symbol>
+      <symbol id="i-sun" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="4" />
+        <path
+          d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1 1m12 12 1 1M5 19l1-1M18 6l1-1"
+        />
+      </symbol>
+      <symbol id="i-github" viewBox="0 0 24 24">
+        <path
+          d="M9 19c-4 1-4-2-6-2m12 5v-4c0-1-.3-2-1-2 4 0 7-2 7-6a6 6 0 0 0-2-4c0-1 0-3-1-4-2 0-3 1-4 1a12 12 0 0 0-4 0C9 2 8 1 6 2c-1 1-1 3-1 4a6 6 0 0 0-2 4c0 4 3 6 7 6-.7 0-1 1-1 2v4"
+        />
+      </symbol>
+      <symbol id="i-upload" viewBox="0 0 24 24">
+        <path d="M12 16V3m-5 5 5-5 5 5M4 16v5h16v-5" />
+      </symbol>
+      <symbol id="i-download" viewBox="0 0 24 24">
+        <path d="M12 3v13m-5-5 5 5 5-5M4 17v4h16v-4" />
+      </symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24">
+        <path d="M20 7v5h-5M4 17v-5h5M5 7a8 8 0 0 1 14 0m0 10a8 8 0 0 1-14 0" />
+      </symbol>
+    </svg>
+    <aside class="sidebar">
+      <a class="brand" href="#top" aria-label="Argosbx 首页"
+        ><span class="brand-mark">A<span>_</span></span
+        ><span>argosbx<small>ENHANCED</small></span></a
+      >
+      <div class="nav-caption">WORKSPACE</div>
+      <nav aria-label="主导航">
+        <a href="#workspace" class="nav-link active"
+          ><svg class="icon"><use href="#i-sliders" /></svg>配置工作台<span
+            class="nav-dot"
+          ></span
+        ></a>
+        <a href="#commands" class="nav-link"
+          ><svg class="icon"><use href="#i-terminal" /></svg>管理命令</a
+        >
+        <a href="#guide" class="nav-link"
+          ><svg class="icon"><use href="#i-book" /></svg>部署指南</a
+        >
+      </nav>
+      <div class="sidebar-note">
+        <span class="small-dot"></span>为 XHTTP 而增强
+        <p>直连与固定隧道，<br />在一处完成配置。</p>
+        <a
+          href="https://github.com/mutsuki14/argosbx-enhanced"
+          target="_blank"
+          rel="noreferrer"
+          >查看项目 <span>↗</span></a
+        >
       </div>
-      <h1>ArgoSBX小钢炮脚本💣一键SSH命令生成器 V26.11.12-enhanced</h1>
-      <p>
-        甬哥Github项目：
-        <a href="https://github.com/yonggekkk" target="_blank">github.com/yonggekkk</a><br>
-        甬哥Blogger博客：
-        <a href="https://ygkkk.blogspot.com" target="_blank">ygkkk.blogspot.com</a><br>
-        甬哥YouTube频道：
-        <a href="https://www.youtube.com/@ygkkk" target="_blank">www.youtube.com/@ygkkk</a><br>
-        甬哥最新动态推特X：
-        <a href="https://x.com/ygkkkg" target="_blank">x.com/ygkkkg</a><br>
-      </p>
-    </header>
-
-    <div class="grid">
-      <section class="card protocol-port">
-        <h2>必选内核协议端口：</h2>
-        <div class="protocol-group separator">
-          <h3>Xray可选协议：</h3>
-          <div class="protocol-grid">
-            <label><input type="checkbox" data-proto="vlpt"> Vless-tcp-reality-vision <span class="pill">vlpt</span></label><input type="text" placeholder="留空则随机端口" data-port="vlpt">
-            <label><input type="checkbox" data-proto="xhpt"> Vless-xhttp-reality-enc <span class="pill">xhpt</span></label><input type="text" placeholder="留空则随机端口" data-port="xhpt">
-            <label><input type="checkbox" data-proto="vxpt"> Vless-xhttp-enc <span class="pill">vxpt</span></label><input type="text" placeholder="留空则随机端口" data-port="vxpt">
-            <label><input type="checkbox" data-proto="vwpt"> Vless-ws-enc <span class="pill">vwpt</span></label><input type="text" placeholder="留空则随机端口（Argo固定隧道的URL端口相同）" data-port="vwpt">
-            <label><input type="checkbox" data-proto="xupt"> Vless-xhttp-tls-UDP <span class="pill">xupt</span></label><input type="text" placeholder="留空则随机端口" data-port="xupt">
-            <label><input type="checkbox" data-proto="xcpt"> Vless-xhttp-tls-TCP/UDP <span class="pill">xcpt</span></label><input type="text" placeholder="留空则随机端口，(443系端口+域名证书,UDP-CDN可用)" data-port="xcpt">
+      <div class="sidebar-footer">
+        <span class="version">WEB / 02</span><span>开源 · 本地生成</span>
+      </div>
+    </aside>
+    <div class="main-shell" id="top">
+      <header class="topbar">
+        <div class="breadcrumb">
+          Argosbx Enhanced <span>/</span> <strong>配置工作台</strong>
+        </div>
+        <div class="topbar-actions">
+          <span class="local-badge"
+            ><span class="small-dot"></span>仅在浏览器中处理</span
+          ><button
+            id="theme-toggle"
+            class="icon-button"
+            aria-label="切换深色模式"
+            title="切换主题"
+          >
+            <svg class="icon"><use href="#i-sun" /></svg></button
+          ><a
+            class="icon-button"
+            href="https://github.com/mutsuki14/argosbx-enhanced"
+            target="_blank"
+            rel="noreferrer"
+            aria-label="GitHub 项目"
+            ><svg class="icon"><use href="#i-github" /></svg
+          ></a>
+        </div>
+      </header>
+      <main>
+        <section class="hero">
+          <div>
+            <div class="eyebrow"><span></span>YOUR NETWORK, YOUR WAY</div>
+            <h1>好连接，从这里开始<span>。</span></h1>
+            <p>
+              选好方案，调好参数。<br class="mobile-only" />把 XHTTP
+              的复杂配置，交给这一行命令。
+            </p>
+            <div class="hero-tags">
+              <span>VLESS Encryption</span><i>·</i><span>固定 Argo</span><i>·</i
+              ><span>REALITY</span>
+            </div>
           </div>
-        </div>
-        <div class="protocol-group separator">
-          <h3>Singbox可选协议：</h3>
-          <div class="protocol-grid">
-            <label><input type="checkbox" data-proto="tupt"> Tuic <span class="pill">tupt</span></label><input type="text" placeholder="留空则随机端口" data-port="tupt">
-            <label><input type="checkbox" data-proto="anpt"> AnyTLS <span class="pill">anpt</span></label><input type="text" placeholder="留空则随机端口" data-port="anpt">
-            <label><input type="checkbox" data-proto="nvpt" disabled> Naiveproxy <span class="pill">nvpt</span></label><input type="text" placeholder="启用域名IP证书TLS后可选，留空则随机端口" data-port="nvpt" disabled>
-            <label><input type="checkbox" data-proto="arpt"> Any-reality <span class="pill">arpt</span></label><input type="text" placeholder="留空则随机端口" data-port="arpt">
-            <label><input type="checkbox" data-proto="sspt"> Shadowsocks-2022 <span class="pill">sspt</span></label><input type="text" placeholder="留空则随机端口" data-port="sspt">
+          <div class="hero-graphic" aria-hidden="true">
+            <div class="orbit orbit-one"></div>
+            <div class="orbit orbit-two"></div>
+            <div class="orbit-line"></div>
+            <span class="orbit-node node-left"
+              ><svg class="icon"><use href="#i-terminal" /></svg></span
+            ><span class="orbit-node node-center"
+              ><svg class="icon"><use href="#i-layers" /></svg></span
+            ><span class="orbit-node node-right"
+              ><svg class="icon"><use href="#i-cloud" /></svg></span
+            ><span class="graphic-caption">ONE COMMAND. CONNECTED.</span>
           </div>
-        </div>
-        <div class="protocol-group separator">
-          <h3>自动(已选Xray则用Xray，否则Singbox)：</h3>
-          <div class="protocol-grid">
-            <label><input type="checkbox" data-proto="hypt"> Hysteria2 <span class="pill">hypt</span></label><input type="text" placeholder="留空则随机端口" data-port="hypt">
-            <label><input type="checkbox" data-proto="vmpt"> Vmess-ws <span class="pill">vmpt</span></label><input type="text" placeholder="留空则随机端口（Argo固定隧道的URL端口相同）" data-port="vmpt">
-            <label><input type="checkbox" data-proto="sopt"> Socks5 <span class="pill">sopt</span></label><input type="text" placeholder="留空则随机端口" data-port="sopt">
+        </section>
+        <section
+          id="workspace"
+          class="workspace-section"
+          aria-labelledby="workspace-title"
+        >
+          <div class="section-heading">
+            <div>
+              <span class="section-index">01</span>
+              <h2 id="workspace-title">构建你的连接</h2>
+            </div>
+            <button class="text-button" id="import-open">
+              <svg class="icon"><use href="#i-upload" /></svg>导入已有命令
+            </button>
           </div>
-        </div>
-      </section>
-
-      <section class="card outbound-warp">
-        <h2>相关全局配置调整： </h2>
-        <div class="row">
-          <label>UUID 密码 <span class="pill">uuid</span></label>
-          <div class="input-with-button">
-            <input id="uuid" type="text" placeholder="留空则随机生成uuid密码"/>
-            <button id="generateUuidBtn" type="button" class="primary">生成 UUID</button>
+          <div class="preset-grid" aria-label="部署方案">
+            <button
+              type="button"
+              class="preset active"
+              data-preset="dual"
+              aria-pressed="true"
+            >
+              <span class="preset-top"
+                ><svg class="icon"><use href="#i-layers" /></svg
+                ><span class="tag">推荐</span
+                ><span class="radio-mark"></span></span
+              ><strong>双节点部署</strong
+              ><span class="preset-subtitle">REALITY + 固定 Argo</span
+              ><span class="preset-description"
+                >直连与隧道，一次配置，两种选择。</span
+              >
+            </button>
+            <button
+              type="button"
+              class="preset"
+              data-preset="reality"
+              aria-pressed="false"
+            >
+              <span class="preset-top"
+                ><svg class="icon"><use href="#i-shield" /></svg
+                ><span class="radio-mark"></span></span
+              ><strong>REALITY 直连</strong
+              ><span class="preset-subtitle">VLESS · XHTTP · REALITY · ENC</span
+              ><span class="preset-description"
+                >连接服务器，使用 REALITY 传输。</span
+              >
+            </button>
+            <button
+              type="button"
+              class="preset"
+              data-preset="argo"
+              aria-pressed="false"
+            >
+              <span class="preset-top"
+                ><svg class="icon"><use href="#i-cloud" /></svg
+                ><span class="radio-mark"></span></span
+              ><strong>固定 Argo 隧道</strong
+              ><span class="preset-subtitle">VLESS · XHTTP · TLS · ENC</span
+              ><span class="preset-description"
+                >通过 Cloudflare 固定域名接入。</span
+              >
+            </button>
           </div>
-        </div>
-        <div class="row"><label>Reality 域名 <span class="pill">reym</span></label><input id="reym" type="text" placeholder="选择Reality相关协议后可用，留空默认apple.com" disabled/></div>
-        <div class="row"><label>CDN优选IP域名 <span class="pill">cfip</span></label><input id="cfip" type="text" placeholder="支持2个优选IP域名(空格间隔)，留空默认优选域名" disabled></div>
-        <div class="row"><label>启用域名IP证书TLS <span class="pill">alns</span></label>
-          <select id="alns">
-            <option value="">默认 关闭 (HY2/TUIC/Anytls/Xhttp-tls为自签证书TLS)</option>
-            <option value="y">开启 (HY2/TUIC/Naive/Anytls/Xhttp-tls为域名IP证书TLS)</option>
-          </select>
-        </div>
-        <div class="row"><label>Hysteria2端口跳跃 <span class="pill">hyjpt</span></label><input id="hyjpt" type="text" placeholder="支持多个范围端口与单端口混用(空格间隔)，例：123:456 789" disabled/></div>
-        <div class="row"><label>CF解析IP的域名<span class="pill">cdnym</span></label><input id="cdnym" type="text" placeholder="Vmess-ws、Vless-xhttp/ws-enc启用80、回源CDN时可用" disabled/></div>
-        <div class="row"><label>套WARP-IP出站 <span class="pill">warp</span></label>
-          <select id="warp">
-            <option value="">默认 服务器本地IP出站</option>
-            <option value="s">1、Singbox套WARP IPv4+IPv6、Xray本地IP</option>
-            <option value="s4">2、Singbox套WARP IPv4、Xray本地IP</option>
-            <option value="s6">3、Singbox套WARP IPv6、Xray本地IP</option>
-            <option value="x">4、Singbox本地IP、Xray套WARP IPv4+IPv6</option>
-            <option value="x4">5、Singbox本地IP、Xray套WARP IPv4</option>
-            <option value="x6">6、Singbox本地IP、Xray套WARP IPv6</option>
-            <option value="s4x4">7、Singbox+Xray同时套WARP IPv4</option>
-            <option value="s4x6">8、Singbox套WARP IPv4、Xray套WARP IPv6</option>
-            <option value="s6x4">9、Singbox套WARP IPv6、Xray套WARP IPv4</option>
-            <option value="s6x6">10、Singbox+Xray同时套WARP IPv6</option>
-            <option value="sx4">11、Singbox套WARP IPv4+IPv6、Xray套WARP IPv4</option>
-            <option value="sx6">12、Singbox套WARP IPv4+IPv6、Xray套WARP IPv6</option>
-            <option value="s4x">13、Singbox套WARP IPv4、Xray套WARP IPv4+IPv6</option>
-            <option value="s6x">14、Singbox套WARP IPv6、Xray套WARP IPv4+IPv6</option>
-            <option value="sx">15、Singbox+Xray同时套WARP IPv4+IPv6</option>
-          </select>
-        </div>
-        
-        <div class="row"><label>IPv4/IPv6 配置导出 <span class="pill">ippz</span></label>
-          <select id="ippz">
-            <option value="">默认 自动</option>
-            <option value="4">导出 IPv4</option>
-            <option value="6">导出 IPv6</option>
-          </select>
-        </div>
-        <div class="row">
-          <label>当前系统开放所有端口 <span class="pill">oap</span></label>
-          <select id="oap">
-            <option value="">默认 关闭</option>
-            <option value="y">开启 执行一次即可关闭</option>
-          </select>
-        </div>
-        <div class="row"><label>导出节点名称前缀 <span class="pill">name</span></label><input id="name" type="text" placeholder="留空则默认协议名前缀"/></div>
-      </section>
-
-      <section class="card subscription-links">
-        <h2>Clash/Mihomo、Singbox、聚合单节点的订阅链接设置：</h2>
-        <div class="row">
-          <label>启用订阅链接 <span class="pill">sub</span></label>
-          <select id="sub">
-            <option value="">默认 关闭 (仅显示单节点分享链接)</option>
-            <option value="y">开启</option>
-          </select>
-        </div>
-        <div class="row">
-          <label>订阅链接密码 <span class="pill">subid</span></label>
-          <input id="subid" type="text" placeholder="留空则默认uuid路径密码" disabled/>
-        </div>
-        <div class="row">
-          <label>订阅链接端口 <span class="pill">subpt</span></label>
-          <input id="subpt" type="text" placeholder="留空则随机端口" disabled/>
-        </div>
-      </section>
-
-      <section class="card argo-tunnel">
-        <h2>Argo 固定隧道：</h2>
-        <div class="row">
-          <label>启用Argo隧道开关 <span class="pill">argo</span></label>
-          <select id="argoSelect">
-            <option value="">默认 关闭</option>
-            <option value="vxpt">VLESS-XHTTP-Argo-TLS-ENC（增强组合）</option>
-            <option value="vwpt">启用主协议Vless-ws-enc的Argo隧道 </option>
-            <option value="vmpt">启用主协议Vmess-ws的Argo隧道 </option>
-          </select>
-        </div>
-        <div class="row"><label>固定隧道CF域名 <span class="pill">agn</span></label><input id="agn" type="text" placeholder="必填，例如 tunnel.example.com" disabled></div>
-        <div class="row"><label>固定隧道Token <span class="pill">agk</span></label><input id="agk" type="password" placeholder="必填，仅填写固定隧道 Token" disabled></div>
-        <div class="row"><label>隧道传输协议</label><select id="agproto" disabled><option value="quic">QUIC / UDP</option><option value="http2">HTTP/2 / TCP</option><option value="auto">自动（可回退 HTTP/2）</option></select></div>
-        <p>仅支持固定隧道，不会回退到随机域名。Cloudflare 的服务地址须指向同机 XHTTP 端口。</p>
-        <div id="xhttp-options" hidden>
-          <h3>XHTTP 增强组合</h3>
-          <div class="row"><label>客户端 HTTP 版本</label><select id="xhttp_alpn"><option value="h2">HTTP/2</option><option value="h3">HTTP/3</option></select></div>
-          <div class="row"><label>上行模式</label><select id="xhttp_mode"><option value="packet-up">packet-up（默认）</option><option value="stream-up">stream-up（实验性，HTTP/2）</option><option value="stream-one">stream-one（实验性，HTTP/2，不分离）</option></select></div>
-          <p>stream-up / stream-one 会启用本机 HTTPS 回源。请按部署输出在固定隧道中开启 HTTP/2 to origin、填写 CA Pool，并启用域名 gRPC。Cloudflare 尚未承诺公开隧道的流式兼容性，需实际测试；stream-one 不支持上下行分离。</p>
-          <div class="row"><label>随机路径</label><input id="xhttp_path" type="text" placeholder="留空自动生成；自定义如 /my-path" /></div>
-          <div class="row"><label>优选 IP / 地址</label><input id="xhttp_address" type="text" placeholder="留空使用固定隧道域名" /></div>
-          <div class="row"><label>XMUX 参数（JSON）</label><input id="xhttp_xmux" type="text" placeholder='{"maxConcurrency":"16-32","hMaxRequestTimes":"600-900"}' /></div>
-          <div class="row"><label>上行 FinalMask</label><select id="xhttp_finalmask"><option value="off">关闭</option><option value="tls-fragment">TLS 握手分片（仅 HTTP/2）</option></select></div>
-          <h3>上下行分离（可选）</h3>
-          <div class="row"><label>下行地址</label><input id="xhttp_download_address" type="text" placeholder="直连 IP 或另一 CDN 域名" /></div>
-          <div class="row"><label>下行端口</label><input id="xhttp_download_port" type="text" placeholder="默认 443" /></div>
-          <div class="row"><label>下行 TLS 域名</label><input id="xhttp_download_servername" type="text" placeholder="下行地址为 IP 时必填，须匹配证书" /></div>
-          <div class="row"><label>下行 HTTP Host</label><input id="xhttp_download_host" type="text" placeholder="默认与下行 TLS 域名相同" /></div>
-          <div class="row"><label>下行 HTTP 版本</label><select id="xhttp_download_alpn"><option value="h2">HTTP/2</option><option value="h3">HTTP/3</option></select></div>
-          <div class="row"><label>下行 FinalMask</label><select id="xhttp_download_finalmask"><option value="off">关闭</option><option value="tls-fragment">TLS 握手分片（仅 HTTP/2）</option></select></div>
-          <p>上下行必须抵达同一 XHTTP 入站，并使用相同路径。HTTP/3 与隧道 QUIC 分别配置。启用 FinalMask 后请导入生成的 xhttp-client.json。</p>
-        </div>
-        <p id="argo-error" role="alert" style="color:#e57373"></p>
-      </section>
-
-      <section class="card shortcut-commands-card">
-        <h2>如已安装脚本，可用以下快捷方式：</h2>
-        <div class="shortcut-commands-content">
-          <button class="command-button" data-command="list">节点显示命令：list</button>
-          <button class="command-button" data-command="del">卸载脚本命令：del</button>
-          <button class="command-button" data-command="upx">升级Xray内核：upx</button>
-          <button class="command-button" data-command="ups">升级Singbox内核：ups</button>
-          <button class="command-button" data-command="upa">升级Argo内核：upa</button>      
-          <button class="command-button" data-command="res">重启脚本命令：res</button>
-          <button class="command-button" data-command="rep">调整并更新脚本（注:所有变量设置完成后再点击）：rep</button>
-        </div>
-      </section>
-
-      <section class="card out">
-        <div class="tabs">
-          <h2>复制下方命令到服务器SSH回车一次即可。建议保存该命令，后续可粘贴回这里直接修改配置。</h2>
-        </div>
-        <div class="command-type-row">
-            <label>命令类型选择：</label>
-            <label style="margin-bottom: 0;"><input type="radio" name="commandType" value="curl" checked> curl</label>
-            <label style="margin-bottom: 0;"><input type="radio" name="commandType" value="wget"> wget</label>
-        </div>
-        <textarea id="output" spellcheck="false"></textarea>
-        <div class="actions">
-          <button id="reset">重置</button>
-          <button id="copy">复制</button>
-        </div>
-        <p style="margin-top: 10px;">相关细节说明，请参考ArgoSBX小钢炮脚本项目💣：<a href="https://github.com/mutsuki14/argosbx-enhanced" target="_blank">github.com/mutsuki14/argosbx-enhanced</a></p>
-Acme-yg域名IP证书脚本：bash <(curl -Ls https://raw.githubusercontent.com/yonggekkk/acme-yg/main/acme.sh)</a></p>
-1、ArgoSBX一键SSH命令生成器发布，只要点几下，各大代理协议任你选：<a href="https://youtu.be/4u6W4c-t3oU" target="_blank">点击视频教程</a></p>
-2、ArgoSBX内置15种WARP出站组合，轻松替代独立的WARP脚本：<a href="https://youtu.be/iywjT8fIka4" target="_blank">点击视频教程</a></p>
-3、代理节点的IP、端口被封依旧可用！ArgoSBX脚本套CDN优选4大方案：<a href="https://youtu.be/RnUT1CNbCr8" target="_blank">点击视频教程</a></p>
-4、VPS+容器搭建最强CDN节点；独家解读Argo临时/固定隧道区别：<a href="https://youtu.be/K35NhrNiLK8" target="_blank">点击视频教程</a></p>
-5、ArgoSBX更新：VLESS抗量子加密；80端口开启TLS，无需域名CDN：<a href="https://youtu.be/X8BFVyeiY9g" target="_blank">点击视频教程</a></p>
-6、小白一分钟自建ArgoSBX翻墙VPN代理：支持IP订阅链接；HY2端口跳跃：<a href="https://youtu.be/xHzZFP_ywLs" target="_blank">点击视频教程</a></p> 
-7、Argosbx更新：NaiveProxy与XHTTP-TLS；XHTTP的UDP模式支持CDN优选IP：<a href="https://youtu.be/NMJIG_2N2a8" target="_blank">点击视频教程</a></p> 
-        安卓手机客户端推荐：<a href="https://github.com/starifly/NekoBoxForAndroid/releases" target="_blank">Nekobox-starifly版 (全协议支持)</a>、<a href="https://github.com/2dust/v2rayNG/releases" target="_blank">V2rayNG官方版</a><br>
-        电脑win客户端推荐：<a href="https://github.com/2dust/v2rayN/releases" target="_blank">V2rayN官方版 (全协议支持)</a><br>
-        苹果IOS客户端推荐：小火箭Shadowrocket、Sing-box MT、Clash、Onexray
-      </p>
-      </section>
+          <div class="workspace-grid">
+            <form
+              id="config-form"
+              class="config-card"
+              autocomplete="off"
+              novalidate
+            >
+              <div class="config-tabs" role="tablist" aria-label="配置步骤">
+                <button
+                  id="tab-basic"
+                  type="button"
+                  class="config-tab active"
+                  role="tab"
+                  aria-selected="true"
+                  aria-controls="panel-basic"
+                  data-tab="basic"
+                >
+                  <span>1</span>基础连接</button
+                ><button
+                  id="tab-enhance"
+                  type="button"
+                  class="config-tab"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="panel-enhance"
+                  tabindex="-1"
+                  data-tab="enhance"
+                >
+                  <span>2</span>传输增强</button
+                ><button
+                  id="tab-advanced"
+                  type="button"
+                  class="config-tab"
+                  role="tab"
+                  aria-selected="false"
+                  aria-controls="panel-advanced"
+                  tabindex="-1"
+                  data-tab="advanced"
+                >
+                  <span>3</span>更多设置
+                </button>
+              </div>
+              <div
+                id="panel-basic"
+                class="tab-panel"
+                role="tabpanel"
+                aria-labelledby="tab-basic"
+              >
+                <div class="panel-intro">
+                  <h3>先连接，再探索。</h3>
+                  <p>填写必要信息，其余交给合理的默认值。</p>
+                </div>
+                <div id="reality-connection" class="connection-block">
+                  <div class="block-heading">
+                    <svg class="icon"><use href="#i-shield" /></svg>
+                    <h4>REALITY 直连</h4>
+                    <span class="micro-label">DIRECT</span>
+                  </div>
+                  <div class="field-grid">
+                    <div class="field">
+                      <label for="reality_address"
+                        >服务器地址 <span>选填</span></label
+                      ><input
+                        id="reality_address"
+                        data-var
+                        placeholder="留空自动检测公网 IP"
+                        spellcheck="false"
+                      /><small>你的 Linux 服务器公网 IP 或域名。</small>
+                    </div>
+                    <div class="field">
+                      <label for="port-xhpt">监听端口</label
+                      ><input
+                        id="port-xhpt"
+                        data-port="xhpt"
+                        value="443"
+                        inputmode="numeric"
+                        placeholder="443"
+                      /><small>需放行该端口的 TCP 入站连接。</small>
+                    </div>
+                    <div class="field full">
+                      <label for="reym">REALITY 目标域名</label
+                      ><input
+                        id="reym"
+                        data-var
+                        value="www.microsoft.com"
+                        placeholder="www.microsoft.com"
+                        spellcheck="false"
+                      /><small>目标站需支持 TLS 1.3 与 HTTP/2。</small>
+                    </div>
+                  </div>
+                </div>
+                <div id="argo-connection" class="connection-block">
+                  <div class="block-heading">
+                    <svg class="icon"><use href="#i-cloud" /></svg>
+                    <h4>固定 Argo 隧道</h4>
+                    <span class="micro-label">TUNNEL</span>
+                  </div>
+                  <div class="field-grid">
+                    <div class="field">
+                      <label for="agn">固定隧道域名 <em>*</em></label
+                      ><input
+                        id="agn"
+                        data-var
+                        placeholder="tunnel.example.com"
+                        spellcheck="false"
+                        aria-required="true"
+                      /><small>Cloudflare 中已配置的公开主机名。</small>
+                    </div>
+                    <div class="field">
+                      <label for="port-vxpt">本机回源端口</label
+                      ><input
+                        id="port-vxpt"
+                        data-port="vxpt"
+                        value="8080"
+                        inputmode="numeric"
+                        placeholder="8080"
+                      /><small>与隧道服务地址端口保持一致。</small>
+                    </div>
+                    <div class="field full">
+                      <label for="agk">Tunnel Token <em>*</em></label>
+                      <div class="input-action">
+                        <input
+                          id="agk"
+                          data-var
+                          type="password"
+                          placeholder="粘贴固定隧道 Token"
+                          spellcheck="false"
+                          aria-required="true"
+                        /><button
+                          type="button"
+                          id="token-toggle"
+                          aria-label="显示 Token"
+                        >
+                          显示
+                        </button>
+                      </div>
+                      <small>只填写 Token 本身，内容不会上传或自动保存。</small>
+                    </div>
+                    <div class="field full">
+                      <label for="agproto">隧道连接协议</label
+                      ><select id="agproto" data-var>
+                        <option value="quic">QUIC / UDP · 默认</option>
+                        <option value="http2">HTTP/2 / TCP</option>
+                        <option value="auto">自动 · 可回退 HTTP/2</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="info-note">
+                    <span>i</span>
+                    <p>
+                      仅支持固定隧道。选择流式模式后，还需调整 Cloudflare
+                      回源设置。
+                    </p>
+                  </div>
+                </div>
+                <div id="custom-notice" class="info-note" hidden>
+                  <span>i</span>
+                  <p>
+                    正在使用自定义协议组合。前往“更多设置”调整协议与监听端口。
+                  </p>
+                </div>
+                <details class="disclosure">
+                  <summary>身份与节点名称 <span>可选</span></summary>
+                  <div class="field-grid">
+                    <div class="field full">
+                      <label for="uuid">UUID / 密码</label>
+                      <div class="input-action">
+                        <input
+                          id="uuid"
+                          data-var
+                          placeholder="留空由安装脚本生成"
+                          spellcheck="false"
+                        /><button type="button" id="generate-uuid">
+                          随机生成
+                        </button>
+                      </div>
+                    </div>
+                    <div class="field full">
+                      <label for="name">节点名称前缀</label
+                      ><input
+                        id="name"
+                        data-var
+                        placeholder="例如 Singapore"
+                        maxlength="120"
+                      />
+                    </div>
+                  </div>
+                </details>
+                <div class="panel-bottom">
+                  <span
+                    ><svg class="icon"><use href="#i-check" /></svg>默认开启
+                    VLESS ENC</span
+                  ><button
+                    type="button"
+                    class="button secondary"
+                    data-next="enhance"
+                  >
+                    调整传输 <svg class="icon"><use href="#i-arrow" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div
+                id="panel-enhance"
+                class="tab-panel"
+                role="tabpanel"
+                aria-labelledby="tab-enhance"
+                hidden
+              >
+                <div class="panel-intro">
+                  <h3>让连接更适合你的网络。</h3>
+                  <p>两种节点独立配置；不确定时，保留默认即可。</p>
+                </div>
+                <div class="profile-switch" aria-label="正在调整的节点">
+                  <button
+                    type="button"
+                    data-profile="reality"
+                    class="active"
+                    aria-pressed="true"
+                  >
+                    REALITY 直连</button
+                  ><button
+                    type="button"
+                    data-profile="argo"
+                    aria-pressed="false"
+                  >
+                    固定 Argo
+                  </button>
+                </div>
+                <div id="enhancement-empty" class="info-note" hidden>
+                  请先选择 XHTTP REALITY 或固定 Argo 方案，再调整增强参数。
+                </div>
+                <div id="enhancement-fields"></div>
+                <div class="panel-bottom">
+                  <button class="text-button" type="button" data-next="basic">
+                    ← 基础连接</button
+                  ><button
+                    class="button secondary"
+                    type="button"
+                    data-next="advanced"
+                  >
+                    更多设置 <svg class="icon"><use href="#i-arrow" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div
+                id="panel-advanced"
+                class="tab-panel"
+                role="tabpanel"
+                aria-labelledby="tab-advanced"
+                hidden
+              >
+                <div class="panel-intro">
+                  <h3>留一些空间，给进阶需求。</h3>
+                  <p>附加协议、订阅与出站，按需开启。</p>
+                </div>
+                <details class="disclosure" open>
+                  <summary>自定义协议组合 <span>14 种协议</span></summary>
+                  <p class="field-help">
+                    可在预设上叠加协议。未填写的端口由安装脚本随机分配。
+                  </p>
+                  <div id="protocol-list"></div>
+                  <div class="field">
+                    <label for="argo">Argo 隧道绑定协议</label
+                    ><select id="argo" data-var>
+                      <option value="">不使用 Argo</option>
+                      <option value="vxpt" selected>VLESS XHTTP ENC</option>
+                      <option value="vwpt">VLESS WebSocket ENC</option>
+                      <option value="vmpt">VMess WebSocket</option>
+                    </select>
+                  </div>
+                </details>
+                <details class="disclosure">
+                  <summary>网络与证书 <span>可选</span></summary>
+                  <div class="field-grid">
+                    <div class="field full">
+                      <label for="cfip">CDN 优选 IP / 域名</label
+                      ><input
+                        id="cfip"
+                        data-var
+                        placeholder="最多两个，使用空格分隔"
+                      />
+                    </div>
+                    <div class="field full">
+                      <label for="cdnym">CDN 回源域名</label
+                      ><input
+                        id="cdnym"
+                        data-var
+                        placeholder="例如 cdn.example.com"
+                      />
+                    </div>
+                    <div class="field full">
+                      <label for="alns">域名 / IP 证书 TLS</label
+                      ><select id="alns" data-var>
+                        <option value="">使用默认自签证书</option>
+                        <option value="y">
+                          开启域名 / IP 证书 TLS
+                        </option></select
+                      ><small
+                        >NaiveProxy 需开启；证书准备方式见项目文档。</small
+                      >
+                    </div>
+                    <div class="field full">
+                      <label for="hyjpt">Hysteria2 端口跳跃</label
+                      ><input
+                        id="hyjpt"
+                        data-var
+                        placeholder="例如 20000:30000 40000"
+                      />
+                    </div>
+                    <div class="field full">
+                      <label for="warp">WARP 出站</label
+                      ><select id="warp" data-var>
+                        <option value="">服务器本地 IP · 默认</option>
+                        <option value="s">Sing-box IPv4 + IPv6</option>
+                        <option value="s4">Sing-box IPv4</option>
+                        <option value="s6">Sing-box IPv6</option>
+                        <option value="x">Xray IPv4 + IPv6</option>
+                        <option value="x4">Xray IPv4</option>
+                        <option value="x6">Xray IPv6</option>
+                        <option value="s4x4">两种内核 IPv4</option>
+                        <option value="s4x6">Sing-box IPv4 / Xray IPv6</option>
+                        <option value="s6x4">Sing-box IPv6 / Xray IPv4</option>
+                        <option value="s6x6">两种内核 IPv6</option>
+                        <option value="sx4">Sing-box 双栈 / Xray IPv4</option>
+                        <option value="sx6">Sing-box 双栈 / Xray IPv6</option>
+                        <option value="s4x">Sing-box IPv4 / Xray 双栈</option>
+                        <option value="s6x">Sing-box IPv6 / Xray 双栈</option>
+                        <option value="sx">两种内核 IPv4 + IPv6</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="ippz">配置导出 IP</label
+                      ><select id="ippz" data-var>
+                        <option value="">自动</option>
+                        <option value="4">IPv4</option>
+                        <option value="6">IPv6</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="oap">开放所有系统端口</label
+                      ><select id="oap" data-var>
+                        <option value="">关闭 · 默认</option>
+                        <option value="y">开启 · 影响系统防火墙</option>
+                      </select>
+                    </div>
+                  </div>
+                </details>
+                <details class="disclosure">
+                  <summary>订阅链接 <span>可选</span></summary>
+                  <div class="field-grid">
+                    <div class="field full">
+                      <label for="sub">订阅服务</label
+                      ><select id="sub" data-var>
+                        <option value="">关闭，仅导出单节点</option>
+                        <option value="y">开启订阅链接</option>
+                      </select>
+                    </div>
+                    <div class="field">
+                      <label for="subid">订阅密码</label
+                      ><input id="subid" data-var placeholder="默认使用 UUID" />
+                    </div>
+                    <div class="field">
+                      <label for="subpt">订阅端口</label
+                      ><input
+                        id="subpt"
+                        data-var
+                        placeholder="留空随机"
+                        inputmode="numeric"
+                      />
+                    </div>
+                  </div>
+                </details>
+                <div class="panel-bottom">
+                  <button class="text-button" type="button" data-next="enhance">
+                    ← 传输增强</button
+                  ><a class="button secondary" href="#preview"
+                    >查看命令 <svg class="icon"><use href="#i-arrow" /></svg
+                  ></a>
+                </div>
+              </div>
+            </form>
+            <aside class="preview-column" id="preview" aria-label="命令预览">
+              <div class="terminal-card">
+                <div class="terminal-header">
+                  <span
+                    ><svg class="icon"><use href="#i-terminal" /></svg
+                    >部署命令</span
+                  ><span class="terminal-live"
+                    ><span class="small-dot"></span>实时生成</span
+                  >
+                </div>
+                <div class="terminal-toolbar">
+                  <span>LINUX / BASH</span>
+                  <div class="method-switch" aria-label="下载工具">
+                    <button
+                      type="button"
+                      data-method="curl"
+                      class="active"
+                      aria-pressed="true"
+                    >
+                      curl</button
+                    ><button
+                      type="button"
+                      data-method="wget"
+                      aria-pressed="false"
+                    >
+                      wget
+                    </button>
+                  </div>
+                </div>
+                <div class="command-area">
+                  <div class="terminal-prompt">
+                    $ <span id="command-label">你的连接，即将就绪</span>
+                  </div>
+                  <textarea
+                    id="output"
+                    readonly
+                    spellcheck="false"
+                    aria-label="生成的部署命令"
+                    placeholder="# 填写固定隧道域名和 Token
+# 命令将在这里自动生成"
+                  ></textarea>
+                </div>
+                <div
+                  id="preview-status"
+                  class="preview-status"
+                  aria-live="polite"
+                >
+                  <span class="small-dot"></span
+                  ><span id="status-text">等待必要信息</span>
+                </div>
+                <div class="terminal-actions">
+                  <button
+                    type="button"
+                    id="copy"
+                    class="button primary"
+                    disabled
+                  >
+                    <svg class="icon"><use href="#i-copy" /></svg
+                    ><span>复制部署命令</span></button
+                  ><button
+                    type="button"
+                    id="download"
+                    class="download-button"
+                    title="下载命令文件"
+                    aria-label="下载命令文件"
+                    disabled
+                  >
+                    <svg class="icon"><use href="#i-download" /></svg>
+                  </button>
+                </div>
+                <div class="terminal-footnote">
+                  复制后，在目标服务器的 SSH 终端中运行。
+                </div>
+              </div>
+              <div class="summary-card">
+                <div class="summary-heading">
+                  <h3>配置概览</h3>
+                  <span id="node-count">2 个节点</span>
+                </div>
+                <div id="connection-summary"></div>
+                <div class="summary-line">
+                  <span>VLESS ENC</span><span id="enc-summary">已开启</span>
+                </div>
+                <div class="summary-line">
+                  <span>参数检查</span
+                  ><span id="validation-count">等待填写</span>
+                </div>
+                <div id="issue-list" aria-live="polite"></div>
+                <div id="secret-note" class="small-note" hidden>
+                  预览已隐藏 Token；复制和下载包含完整值。
+                </div>
+                <button
+                  id="return-install"
+                  type="button"
+                  class="text-button"
+                  hidden
+                >
+                  ← 返回部署命令
+                </button>
+              </div>
+              <div class="preview-tools">
+                <button type="button" class="text-button" id="reset">
+                  <svg class="icon"><use href="#i-refresh" /></svg
+                  >重置配置</button
+                ><a href="#guide" class="text-button">需要帮助？ ↗</a>
+              </div>
+            </aside>
+          </div>
+        </section>
+        <section
+          id="commands"
+          class="utility-section"
+          aria-labelledby="commands-title"
+        >
+          <div class="section-heading">
+            <div>
+              <span class="section-index">02</span>
+              <h2 id="commands-title">连接之后，轻松管理</h2>
+            </div>
+            <span class="section-subtitle">适用于已安装的服务器</span>
+          </div>
+          <div class="command-grid">
+            <button class="utility-card" data-command="status">
+              <svg class="icon"><use href="#i-sliders" /></svg
+              ><strong>查看运行状态</strong><span>检查节点与服务</span
+              ><code>status ↗</code></button
+            ><button class="utility-card" data-command="doctor">
+              <svg class="icon"><use href="#i-shield" /></svg
+              ><strong>诊断连接</strong><span>定位配置与连接问题</span
+              ><code>doctor ↗</code></button
+            ><button class="utility-card" data-command="xhttp">
+              <svg class="icon"><use href="#i-layers" /></svg
+              ><strong>XHTTP 管理向导</strong><span>在服务器中调整增强项</span
+              ><code>xhttp ↗</code></button
+            ><button class="utility-card" data-command="list">
+              <svg class="icon"><use href="#i-terminal" /></svg
+              ><strong>查看节点</strong><span>获取节点与导出信息</span
+              ><code>list ↗</code>
+            </button>
+          </div>
+          <details class="more-commands">
+            <summary>其他管理命令</summary>
+            <div class="command-chips">
+              <button data-command="res">重启服务</button
+              ><button data-command="export">导出客户端</button
+              ><button data-command="upx">更新 Xray</button
+              ><button data-command="ups">更新 Sing-box</button
+              ><button data-command="upa">更新 cloudflared</button
+              ><button data-command="rep">按当前配置重配</button
+              ><button data-command="del">卸载脚本</button>
+            </div>
+            <p>
+              重配时须保留所有需要的协议。卸载会移除服务；这里只生成命令，复制到服务器运行后才会生效。
+            </p>
+          </details>
+        </section>
+        <section
+          id="guide"
+          class="utility-section"
+          aria-labelledby="guide-title"
+        >
+          <div class="section-heading">
+            <div>
+              <span class="section-index">03</span>
+              <h2 id="guide-title">从配置，到第一次连接</h2>
+            </div>
+            <a
+              class="text-button"
+              href="https://github.com/mutsuki14/argosbx-enhanced#readme"
+              target="_blank"
+              rel="noreferrer"
+              >完整文档 ↗</a
+            >
+          </div>
+          <div class="guide-grid">
+            <article>
+              <span class="step-label">STEP 01</span>
+              <h3>准备你的服务器</h3>
+              <p>
+                使用 Linux x86_64 或 ARM64 主机。选择固定 Argo 时，先准备
+                Cloudflare 公开主机名与 Tunnel Token。
+              </p>
+            </article>
+            <article>
+              <span class="step-label">STEP 02</span>
+              <h3>运行生成的命令</h3>
+              <p>
+                在 SSH 终端执行命令，按安装输出配置回源。Argo 流式模式还需
+                HTTPS、HTTP/2 to origin、CA Pool 与域名 gRPC。
+              </p>
+            </article>
+            <article>
+              <span class="step-label">STEP 03</span>
+              <h3>导入客户端，开始连接</h3>
+              <p>
+                使用支持 XHTTP 与 VLESS Encryption 的客户端。启用 FinalMask
+                后，导入完整客户端 JSON，再测试实际连通性。
+              </p>
+            </article>
+          </div>
+          <details class="faq">
+            <summary>增强参数应该怎么选？</summary>
+            <p>
+              先保留默认值，再根据网络表现逐项调整。XMUX
+              控制复用方式，不保证提高带宽；FinalMask 将 TLS
+              握手分片，可能增加延迟。客户端 HTTP/3 与隧道 QUIC
+              是两个独立设置。Argo 的 stream-up / stream-one
+              属于实验性模式，需要实际验证网络兼容性。
+            </p>
+            <a
+              href="https://github.com/XTLS/Xray-core/discussions/4113"
+              target="_blank"
+              rel="noreferrer"
+              >XHTTP 官方说明 ↗</a
+            ><a
+              href="https://xtls.github.io/config/transports/finalmask.html"
+              target="_blank"
+              rel="noreferrer"
+              >FinalMask 文档 ↗</a
+            >
+          </details>
+        </section>
+        <footer class="page-footer">
+          <span>Argosbx Enhanced <i>·</i> 让连接，简单一点。</span
+          ><span
+            >基于
+            <a
+              href="https://github.com/yonggekkk/argosbx"
+              target="_blank"
+              rel="noreferrer"
+              >yonggekkk/argosbx</a
+            >
+            <i>·</i> GPL-3.0</span
+          >
+        </footer>
+      </main>
     </div>
-  </div>
-
-<script src="generator-enhanced.js"></script>
-<script>
-(function(){
-  const CURL = 'bash <(curl -Ls https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)';
-  const WGET = 'bash <(wget -qO- https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)';
-  const protoKeys = ['sopt','vmpt','vlpt','xhpt','vxpt','vwpt','xupt','xcpt','hypt','tupt','nvpt','anpt','arpt','sspt'];
-  const optIds = ['agproto', ...ArgosbxEnhanced.xhttpFields, 'warp','ippz','uuid','reym','cfip','alns','hyjpt','cdnym','name', 'oap', 'sub', 'subid', 'subpt'];
-
-  const argoSelect = document.getElementById('argoSelect');
-  const agn = document.getElementById('agn');
-  const agk = document.getElementById('agk');
-  const cfip = document.getElementById('cfip');
-  const sub = document.getElementById('sub');
-  const subid = document.getElementById('subid');
-  const subpt = document.getElementById('subpt');
-  
-  const vmessWsCheckbox = document.querySelector('[data-proto="vmpt"]');
-  const vlessWsVCheckbox = document.querySelector('[data-proto="vwpt"]');
-  const vlessXhttpCheckbox = document.querySelector('[data-proto="vxpt"]');
-  const vlessTcpRealityCheckbox = document.querySelector('[data-proto="vlpt"]');
-  const vlessXhttpRealityCheckbox = document.querySelector('[data-proto="xhpt"]');
-  const vlessXhttpTlsCheckbox = document.querySelector('[data-proto="xcpt"]');
-  const anyRealityCheckbox = document.querySelector('[data-proto="arpt"]');
-  const hy2Checkbox = document.querySelector('[data-proto="hypt"]');
-  const nvptCheckbox = document.querySelector('[data-proto="nvpt"]');
-  const nvptPortInput = document.querySelector('[data-port="nvpt"]');
-
-  const reymInput = document.getElementById('reym');
-  const alnsSelect = document.getElementById('alns');
-  const hyjptInput = document.getElementById('hyjpt');
-  const cdnymInput = document.getElementById('cdnym');
-  
-  const output = document.getElementById('output');
-  const allInputs = document.querySelectorAll('input, select');
-  const checkboxes = document.querySelectorAll('input[type="checkbox"]');
-  const textInputs = document.querySelectorAll('input[type="text"], input[type="password"]');
-  const ippzSelect = document.getElementById('ippz');
-  const oapSelect = document.getElementById('oap');
-  const generateUuidBtn = document.getElementById('generateUuidBtn');
-  const uuidInput = document.getElementById('uuid');
-  const themeSwitchCheckbox = document.getElementById('theme-switch-checkbox');
-  const commandTypeRadios = document.querySelectorAll('input[name="commandType"]');
-
-  let isUpdatingFromOutput = false;
-
-  function initTheme() {
-    const isLightMode = localStorage.getItem('theme') === 'light';
-    if (isLightMode) {
-      document.body.classList.add('light-mode');
-      themeSwitchCheckbox.checked = true;
-    }
-  }
-
-  function toggleTheme() {
-    document.body.classList.toggle('light-mode');
-    const isLightMode = document.body.classList.contains('light-mode');
-    localStorage.setItem('theme', isLightMode ? 'light' : 'dark');
-  }
-
-  themeSwitchCheckbox.addEventListener('change', toggleTheme);
-
-  function updateArgoState(argoValue) {
-    const isEnabled = argoValue !== '';
-    if (!isEnabled) {
-      agn.value = '';
-      agk.value = '';
-    }
-    [agn, agk, document.getElementById('agproto')].forEach(i => i.disabled = !isEnabled);
-  }
-
-  function updateSubState() {
-    const isEnabled = sub.value === 'y';
-    if (!isEnabled) {
-      subid.value = '';
-      subpt.value = '';
-    }
-    [subid, subpt].forEach(i => i.disabled = !isEnabled);
-    render();
-  }
-
-  function resetForm(preserveIppz = false) {
-    checkboxes.forEach(cb => {
-        cb.checked = false;
-    });
-    textInputs.forEach(inp => {
-        inp.value = '';
-    });
-    document.getElementById('warp').value = '';
-    if (!preserveIppz) {
-        ippzSelect.value = '';
-    }
-    oapSelect.value = '';
-    document.getElementById('uuid').value = '';
-    document.getElementById('reym').value = '';
-    document.getElementById('cfip').value = '';
-    document.getElementById('alns').value = '';
-    document.getElementById('hyjpt').value = '';
-    document.getElementById('name').value = '';
-    sub.value = '';
-    updateSubState();
-    argoSelect.value = '';
-    updateArgoState('');
-    ['agproto', ...ArgosbxEnhanced.xhttpFields].forEach(id => { const el = document.getElementById(id); if (el.tagName === 'SELECT') el.selectedIndex = 0; });
-    updateDynamicInputs();
-  }
-
-  function updateDynamicInputs() {
-      const enhanced = argoSelect.value === 'vxpt';
-      document.getElementById('xhttp-options').hidden = !enhanced;
-      ArgosbxEnhanced.xhttpFields.forEach(id => document.getElementById(id).disabled = !enhanced);
-      document.getElementById('agproto').disabled = argoSelect.value === '';
-
-      const isCdnEnabled = vmessWsCheckbox.checked || vlessXhttpCheckbox.checked || vlessWsVCheckbox.checked;
-      cdnymInput.disabled = !isCdnEnabled;
-      if (!isCdnEnabled) cdnymInput.value = '';
-
-      const isRealityEnabled = vlessTcpRealityCheckbox.checked || vlessXhttpRealityCheckbox.checked || anyRealityCheckbox.checked;
-      reymInput.disabled = !isRealityEnabled;
-      if (!isRealityEnabled) reymInput.value = '';
-
-      const isAlnsEnabled = alnsSelect.value === 'y';
-      nvptCheckbox.disabled = !isAlnsEnabled;
-      nvptPortInput.disabled = !isAlnsEnabled;
-      if (!isAlnsEnabled) {
-          nvptCheckbox.checked = false;
-          nvptPortInput.value = '';
-      }
-
-      const isHy2Enabled = hy2Checkbox.checked;
-      hyjptInput.disabled = !isHy2Enabled;
-      if (!isHy2Enabled) hyjptInput.value = '';
-
-      const isCfipEnabled = vlessXhttpTlsCheckbox.checked || vlessWsVCheckbox.checked || vlessXhttpCheckbox.checked || vmessWsCheckbox.checked;
-      cfip.disabled = !isCfipEnabled;
-      if (!isCfipEnabled) {
-          cfip.value = '';
-      }
-
-      render();
-  }
-
-  sub.addEventListener('change', updateSubState);
-  alnsSelect.addEventListener('change', updateDynamicInputs);
-
-  argoSelect.addEventListener('change', () => {
-    const argoValue = argoSelect.value;
-    const isEnabled = argoValue !== '';
-    [agn, agk].forEach(i => i.disabled = !isEnabled);
-    if (argoValue === 'vxpt') {
-        vlessXhttpCheckbox.checked = true;
-    } else if (argoValue === 'vwpt') {
-        vlessWsVCheckbox.checked = true;
-    } else if (argoValue === 'vmpt') {
-        vmessWsCheckbox.checked = true;
-    } 
-    if (!isEnabled) {
-        agn.value = '';
-        agk.value = '';
-    }
-    updateDynamicInputs(); 
-    render();
-  });
-
-  [vmessWsCheckbox, vlessWsVCheckbox, vlessXhttpCheckbox, vlessTcpRealityCheckbox, vlessXhttpRealityCheckbox, vlessXhttpTlsCheckbox, anyRealityCheckbox, hy2Checkbox].forEach(ck => {
-    ck.addEventListener('change', () => {
-      if (!vlessXhttpCheckbox.checked && argoSelect.value === 'vxpt') {
-         argoSelect.value = '';
-         updateArgoState('');
-      }
-      if (!vlessWsVCheckbox.checked && argoSelect.value === 'vwpt') { 
-         argoSelect.value = '';
-         updateArgoState('');
-      }
-      if (!vmessWsCheckbox.checked && argoSelect.value === 'vmpt') { 
-         argoSelect.value = '';
-         updateArgoState('');
-      }
-      updateDynamicInputs();
-    });
-  });
-
-  document.querySelectorAll('[data-port]').forEach(inp => {
-    inp.addEventListener('input', () => {
-      const key = inp.getAttribute('data-port');
-      const ck = document.querySelector(`[data-proto="${key}"]`);
-      if (!ck) return;
-      if (inp.value.trim() !== '' && !ck.checked) {
-        ck.checked = true;
-      }
-      updateDynamicInputs();
-      render();
-    });
-  });
-
-  document.querySelectorAll('[data-proto]').forEach(ck => {
-    ck.addEventListener('change', () => {
-      if (!ck.checked) {
-        const key = ck.getAttribute('data-proto');
-        const pt = document.querySelector(`[data-port="${key}"]`);
-        if (pt) {
-          pt.value = '';
-        }
-      }
-      updateDynamicInputs();
-      render();
-    });
-  });
-
-  generateUuidBtn.addEventListener('click', () => {
-    uuidInput.value = crypto.randomUUID();
-    render();
-  });
-
-  commandTypeRadios.forEach(radio => {
-    radio.addEventListener('change', render);
-  });
-
-  function collectVars(){
-    const m = {};
-    protoKeys.forEach(k => {
-      const ck = document.querySelector(`[data-proto="${k}"]`);
-      const pt = document.querySelector(`[data-port="${k}"]`);
-      if (ck && ck.checked) {
-        const v = (pt.value || '').trim();
-        m[k] = v;
-      }
-    });
-    optIds.forEach(id => {
-      const el = document.getElementById(id);
-      const v = (el.value || '').trim();
-      if (v !== '' && !el.disabled) {
-        m[id] = v;
-      }
-    });
-    
-    const argoValue = argoSelect.value;
-    if (argoValue !== '') {
-      m['argo'] = argoValue;
-      if (argoValue === 'vxpt') m['xhttp_download_address'] = document.getElementById('xhttp_download_address').value.trim();
-      const _agn = (agn.value || '').trim();
-      const _agk = (agk.value || '').trim();
-      if (!agn.disabled && _agn) m['agn'] = _agn;
-      if (!agk.disabled && _agk) m['agk'] = _agk;
-    }
-    return m;
-  }
-
-  function toBashVars(m){
-    const keys = Object.keys(m);
-    const ordered = [];
-    protoKeys.forEach(k => { if (keys.includes(k)) ordered.push(k); });
-    ['warp', 'uuid', 'reym', 'cfip', 'alns', 'hyjpt', 'cdnym', 'name', 'ippz', 'sub', 'subid', 'subpt'].forEach(k => { if (keys.includes(k)) ordered.push(k); });
-    if (keys.includes('argo')) ordered.push('argo');
-    if (keys.includes('agn')) ordered.push('agn');
-    if (keys.includes('agk')) ordered.push('agk');
-    if (keys.includes('oap')) ordered.push('oap');
-    keys.forEach(k => { if (!ordered.includes(k)) ordered.push(k); });
-
-    return ordered.map(k => `${k}=${ArgosbxEnhanced.quote(m[k])}`).join(' ');
-  }
-
-  function formError(m) {
-    const error = ArgosbxEnhanced.validate(m);
-    document.getElementById('argo-error').textContent = error;
-    document.getElementById('copy').disabled = !!error;
-    return error;
-  }
-
-  function render(){
-    if (isUpdatingFromOutput) return; 
-    const m = collectVars();
-    if (formError(m)) { output.value = ''; return; }
-    const vars = toBashVars(m);
-    const selectedCommand = document.querySelector('input[name="commandType"]:checked').value === 'curl' ? CURL : WGET;
-    output.value = (vars ? vars + ' ' : '') + selectedCommand;
-  }
-
-  function parseAndFillOutput() {
-    const text = output.value.trim();
-    if (!text) return;
-
-    isUpdatingFromOutput = true;
-
-    if (text.includes('wget')) {
-      document.querySelector('input[name="commandType"][value="wget"]').checked = true;
-    } else {
-      document.querySelector('input[name="commandType"][value="curl"]').checked = true;
-    }
-
-    const params = ArgosbxEnhanced.parseAssignments(text);
-
-    protoKeys.forEach(k => {
-      const ck = document.querySelector(`[data-proto="${k}"]`);
-      const pt = document.querySelector(`[data-port="${k}"]`);
-      if (k in params) {
-        if (ck) ck.checked = true;
-        if (pt) pt.value = params[k];
-      } else {
-        if (ck) ck.checked = false;
-        if (pt) pt.value = '';
-      }
-    });
-
-    if ('sub' in params) {
-      sub.value = params['sub'];
-    } else {
-      sub.value = '';
-    }
-    [subid, subpt].forEach(i => i.disabled = (sub.value !== 'y'));
-
-    if ('alns' in params) {
-      alnsSelect.value = params['alns'];
-    } else {
-      alnsSelect.value = '';
-    }
-
-    if ('argo' in params) {
-      argoSelect.value = params['argo'];
-    } else {
-      argoSelect.value = '';
-    }
-    [agn, agk].forEach(i => i.disabled = (argoSelect.value === ''));
-
-    const isCdnEnabled = params['vmpt'] !== undefined || params['vxpt'] !== undefined || params['vwpt'] !== undefined;
-    cdnymInput.disabled = !isCdnEnabled;
-    const isRealityEnabled = params['vlpt'] !== undefined || params['xhpt'] !== undefined || params['arpt'] !== undefined;
-    reymInput.disabled = !isRealityEnabled;
-    hyjptInput.disabled = (params['hypt'] === undefined);
-
-    const isAlnsEnabled = alnsSelect.value === 'y';
-    nvptCheckbox.disabled = !isAlnsEnabled;
-    nvptPortInput.disabled = !isAlnsEnabled;
-
-    const isCfipEnabled = params['xcpt'] !== undefined || params['vwpt'] !== undefined || params['vxpt'] !== undefined || params['vmpt'] !== undefined;
-    cfip.disabled = !isCfipEnabled;
-
-    const allIds = [...optIds, 'agn', 'agk'];
-    allIds.forEach(id => {
-      const el = document.getElementById(id);
-      if (el) {
-        if (id in params) {
-          el.value = params[id];
-        } else {
-          el.value = '';
-        }
-      }
-    });
-
-    document.getElementById('xhttp-options').hidden = argoSelect.value !== 'vxpt';
-    ArgosbxEnhanced.xhttpFields.forEach(id => document.getElementById(id).disabled = argoSelect.value !== 'vxpt');
-    document.getElementById('agproto').disabled = !argoSelect.value;
-    formError(collectVars());
-    isUpdatingFromOutput = false;
-  }
-
-  output.addEventListener('input', parseAndFillOutput);
-
-  initTheme();
-  updateDynamicInputs();
-  updateSubState();
-  render();
-
-  allInputs.forEach(el => {
-    el.addEventListener('input', render);
-    el.addEventListener('change', render);
-  });
-  
-  document.querySelectorAll('.command-button').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const command = btn.getAttribute('data-command');
-      const ippzValue = ippzSelect.value;
-      const selectedCommand = document.querySelector('input[name="commandType"]:checked').value === 'curl' ? CURL : WGET;
-      const shouldPreserveIppz = (command === 'list' && (ippzValue === '4' || ippzValue === '6'));
-
-      if (command === 'rep') {
-        const m = collectVars();
-        if (formError(m)) { output.value = ''; return; }
-        const vars = toBashVars(m);
-        output.value = (vars ? vars + ' ' : '') + selectedCommand + ' rep';
-      } else {
-        resetForm(shouldPreserveIppz);
-        if (shouldPreserveIppz) {
-          ippzSelect.value = ippzValue;
-          const m = collectVars();
-          m['ippz'] = ippzValue;
-          const vars = toBashVars(m);
-          output.value = `${vars} ${selectedCommand} ${command}`;
-        } else {
-          output.value = `${selectedCommand} ${command}`;
-        }
-      }
-    });
-  });
-
-  document.getElementById('copy').addEventListener('click', async () => {
-    if (formError(collectVars())) return;
-    const t = document.getElementById('output');
-    t.select(); t.setSelectionRange(0, 99999);
-    try { await navigator.clipboard.writeText(t.value); showToast('已复制到剪贴板'); } catch (e) { document.execCommand('copy'); showToast('已复制'); }
-  });
-
-  document.getElementById('reset').addEventListener('click', () => { 
-    resetForm(false); 
-    output.value = ''; 
-    showToast('已清空全部配置');
-  });
-
-  function showToast(msg) {
-    const d = document.createElement('div');
-    d.textContent = msg; d.style.position = 'fixed'; d.style.left = '50%'; d.style.top = '20px'; d.style.transform = 'translateX(-50%)';
-    d.style.padding = '10px 14px'; d.style.background = 'rgba(0,0,0,.6)'; d.style.color = '#fff'; d.style.border = '1px solid #334155'; d.style.borderRadius = '10px'; d.style.zIndex = 9999;
-    document.body.appendChild(d); setTimeout(() => d.remove(), 1400);
-  }
-})();
-</script>
-</body>
+    <dialog id="import-dialog" aria-labelledby="import-title">
+      <div class="dialog-heading">
+        <h2 id="import-title">继续你的配置</h2>
+        <button
+          class="icon-button"
+          type="button"
+          id="import-close"
+          aria-label="关闭导入"
+        >
+          ×
+        </button>
+      </div>
+      <p>粘贴之前生成的命令，识别的参数会填入表单。导入不会执行命令。</p>
+      <label for="import-text">已有部署命令</label
+      ><textarea
+        id="import-text"
+        placeholder="xhpt='443' vxpt='8080' argo='vxpt' …"
+        spellcheck="false"
+      ></textarea>
+      <p id="import-error" role="alert"></p>
+      <div class="dialog-actions">
+        <button class="button secondary" id="import-cancel">取消</button
+        ><button class="button dark" id="import-apply">
+          导入配置 <svg class="icon"><use href="#i-arrow" /></svg>
+        </button>
+      </div>
+    </dialog>
+    <dialog id="reset-dialog" aria-labelledby="reset-title">
+      <div class="dialog-heading"><h2 id="reset-title">重新开始配置？</h2></div>
+      <p>这会清空已填写的域名、Token 和自定义参数，恢复双节点默认方案。</p>
+      <div class="dialog-actions">
+        <button class="button secondary" id="reset-cancel">保留配置</button
+        ><button class="button dark" id="reset-confirm">重置配置</button>
+      </div>
+    </dialog>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <noscript
+      ><div class="noscript">
+        请启用 JavaScript 使用命令生成器，或查看
+        <a href="https://github.com/mutsuki14/argosbx-enhanced#readme"
+          >项目部署文档</a
+        >。
+      </div></noscript
+    >
+  </body>
 </html>
