@@ -13,6 +13,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25.x'
+          cache: false
       - name: Shell and JavaScript syntax
         run: |
           bash -n argosbx.sh

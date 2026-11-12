@@ -86,8 +86,6 @@ read -p "必填！Argo固定隧道域名: " input
 if [ -z "$input" ]; then
 echo "固定隧道域名不能为空" >&2
 exit 1
-sed -i "68s/^.*$/AGNS=\"\"/" $HOME/sapsbx.sh
-sed -i "71s/^.*$/AGKS=\"\"/" $HOME/sapsbx.sh
 else
 quoted=$(printf '%s ' $input)
 sed -i "68s/^.*$/AGNS=\"${quoted% }\"/" $HOME/sapsbx.sh
