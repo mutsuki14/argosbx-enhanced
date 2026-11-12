@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fixed-tunnel XHTTP configuration and lossless Xray client export (stdlib only)."""
+"""REALITY / fixed-tunnel XHTTP configuration and lossless client export (stdlib only)."""
 import copy
 import hashlib
 import io
@@ -16,7 +16,7 @@ import platform
 import tempfile
 import urllib.request
 import zipfile
-from urllib.parse import quote, urlencode
+from urllib.parse import quote, urlencode, urlsplit, parse_qs
 
 
 XMUX = {"maxConcurrency": "16-32", "maxConnections": 0,
@@ -26,15 +26,30 @@ FRAGMENT = {"tcp": [{"type": "fragment", "settings": {
     "packets": "tlshello", "lengths": ["100-200"],
     "delays": ["0-1"], "maxSplit": "2-3"}}]}
 FIELDS = ("mode", "alpn", "path", "xmux", "finalmask", "address",
+          "padding_bytes", "max_post_bytes", "min_post_interval_ms",
+          "fragment_length", "fragment_interval", "fragment_count",
           "download_address", "download_port", "download_servername",
           "download_host", "download_alpn", "download_finalmask")
 XRAY_VERSION = "v26.11.9"
 STREAM_MODES = ("stream-up", "stream-one")
+PROFILES = {"argo": ("vless-xhttp", "xhttp", "xhttp_"),
+            "reality": ("xhttp-reality", "xhttp-reality", "reality_")}
+XMUX_PRESETS = {
+    "balanced": dict(XMUX),
+    "low-reuse": dict(XMUX, maxConcurrency="4-8", cMaxReuseTimes="64-128"),
+    "connections": dict(XMUX, maxConcurrency=0, maxConnections=4),
+}
+
+
 XRAY_ARCHIVES = {
     "x86_64": ("64", "b651f7e1d9966ee2c1b1ee1bf8b52c72771824d3065dce96bbc8bcc19ed95f82"),
     "aarch64": ("arm64-v8a", "64ed6858982a7f5eb85d88b811089063bd4f17561f4c8f44e0f1dc8e6f6430be"),
     "arm64": ("arm64-v8a", "64ed6858982a7f5eb85d88b811089063bd4f17561f4c8f44e0f1dc8e6f6430be"),
 }
+
+
+def profile_file(directory, profile, suffix):
+    return Path(directory) / (PROFILES[profile][1] + "-" + suffix)
 
 
 def install_xray(directory):
@@ -82,23 +97,37 @@ def value_range(value, field, negative=False):
     return parts[0], parts[-1]
 
 
-def options(env, previous=None):
+def options(env, previous=None, profile="argo"):
     opts = dict(previous or {})
-    if env.get("xhttp_download_address") == "":
+    prefix = PROFILES[profile][2]
+    if env.get(prefix + "download_address") == "":
         for key in list(opts):
             if key.startswith("download_"):
                 del opts[key]
     for field in FIELDS:
-        key = "xhttp_" + field
+        key = prefix + field
         if key in env:
             opts[field] = env[key]
-    opts.setdefault("mode", "packet-up")
+    opts.setdefault("mode", "stream-one" if profile == "reality" else "packet-up")
     opts.setdefault("alpn", "h2")
     opts.setdefault("path", "/" + secrets.token_hex(16))
     opts.setdefault("xmux", copy.deepcopy(XMUX))
     opts.setdefault("finalmask", "off")
     opts.setdefault("download_alpn", "h2")
     opts.setdefault("download_finalmask", "off")
+    for field, default in (("padding_bytes", "100-1000"), ("max_post_bytes", 1000000),
+                           ("min_post_interval_ms", 30), ("fragment_length", "100-200"),
+                           ("fragment_interval", "0-1"), ("fragment_count", "2-3")):
+        opts.setdefault(field, default)
+        low, high = value_range(opts[field], prefix + field)
+        limits = {"padding_bytes": (0, 65536), "max_post_bytes": (1, 16000000),
+                  "min_post_interval_ms": (0, 60000), "fragment_length": (1, 65536),
+                  "fragment_interval": (0, 1000), "fragment_count": (1, 1000)}
+        floor, ceiling = limits[field]
+        require(floor <= low <= high <= ceiling, prefix + field + " 超出允许范围")
+    if profile == "reality":
+        require(opts["alpn"] == "h2", "REALITY 使用 TCP/H2，不支持 H3")
+        require(not opts.get("download_address"), "REALITY 直连预设不接受 TLS 下行分离；请在固定 Argo 节点配置分离")
     require(opts["mode"] in ("packet-up", *STREAM_MODES),
             "xhttp_mode 只能为 packet-up、stream-up 或 stream-one")
     require(opts["alpn"] in ("h2", "h3"), "xhttp_alpn 只能为 h2 或 h3")
@@ -164,19 +193,54 @@ def json_file(path, value):
     write_private(path, json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 
-def update_subscription(path, uri):
+def update_subscription(path, uri, name="vless-xhttp-argo-tls-enc", identity=None):
     path = Path(path)
     lines = path.read_text().splitlines() if path.exists() else []
-    lines = [line for line in lines if not (line.startswith('vless://') and
-             line.rsplit('#', 1)[-1] == 'vless-xhttp-argo-tls-enc')]
+    def owned(line):
+        if not line.startswith('vless://'):
+            return False
+        if line.rsplit('#', 1)[-1] == name:
+            return True
+        if identity:
+            try:
+                parsed = urlsplit(line)
+                query = parse_qs(parsed.query)
+                return (parsed.username, parsed.port) == identity and query.get('security') == ['reality'] and query.get('type') == ['xhttp']
+            except ValueError:
+                pass
+        return False
+    lines = [line for line in lines if not owned(line)]
     if uri.strip():
         lines.append(uri.strip())
     write_private(path, '\n'.join(lines) + ('\n' if lines else ''))
 
 
-def saved_options(directory, env):
-    saved = Path(directory) / "xhttp-options.json"
-    return options(env, json.loads(saved.read_text()) if saved.exists() else None)
+def sync_subscription(directory, profile, path):
+    identity = None
+    if profile == 'reality':
+        config = json.loads((Path(directory) / 'xr.json').read_text())
+        inbound = next(i for i in config['inbounds'] if i.get('tag') == PROFILES[profile][0])
+        identity = (inbound['settings']['clients'][0]['id'], int(inbound['port']))
+    update_subscription(path, profile_file(directory, profile, 'uri.txt').read_text(),
+                        'vless-xhttp-reality-enc' if profile == 'reality' else 'vless-xhttp-argo-tls-enc', identity)
+
+
+def saved_options(directory, env, profile="argo"):
+    saved = profile_file(directory, profile, "options.json")
+    return options(env, json.loads(saved.read_text()) if saved.exists() else None, profile)
+
+
+def transport_extra(opts, server=False):
+    extra = {"xPaddingBytes": opts["padding_bytes"], "scMaxEachPostBytes": opts["max_post_bytes"]}
+    if not server:
+        extra.update(xmux=copy.deepcopy(opts["xmux"]), scMinPostsIntervalMs=opts["min_post_interval_ms"])
+    return extra
+
+
+def fragment(opts):
+    return {"tcp": [{"type": "fragment", "settings": {"packets": "tlshello",
+        "lengths": [opts["fragment_length"]], "delays": [opts["fragment_interval"]],
+        "maxSplit": opts["fragment_count"]}}]}
 
 
 def origin_certificate(directory):
@@ -245,13 +309,13 @@ def stream(opts, domain, download=False):
         "xhttpSettings": {"host": opts["download_host"] if download else domain,
                           "path": opts["path"],
                           "mode": "auto" if download else opts["mode"],
-                          "extra": {"xmux": copy.deepcopy(opts["xmux"])}}}
+                          "extra": transport_extra(opts)}}
     if opts[prefix + "alpn"] == "h2":
         result["tlsSettings"]["fingerprint"] = "chrome"
     if not download and opts["mode"] in STREAM_MODES:
         result["xhttpSettings"]["extra"]["noGRPCHeader"] = False
     if opts[prefix + "finalmask"] == "tls-fragment":
-        result["finalmask"] = copy.deepcopy(FRAGMENT)
+        result["finalmask"] = fragment(opts)
     if download:
         result.update(address=opts["download_address"], port=opts["download_port"])
     elif opts.get("download_address"):
@@ -259,93 +323,121 @@ def stream(opts, domain, download=False):
     return result
 
 
-def server_config(config, opts, directory):
+def server_config(config, opts, directory, profile="argo"):
     """Render the XHTTP inbound without changing other protocols or the live JSON."""
     config = copy.deepcopy(config)
-    inbound = next((x for x in config["inbounds"] if x.get("tag") == "vless-xhttp"), None)
-    require(inbound is not None, "未找到 vless-xhttp 入站")
+    inbound = next((x for x in config["inbounds"] if x.get("tag") == PROFILES[profile][0]), None)
+    require(inbound is not None, "未找到 " + PROFILES[profile][0] + " 入站")
     require(inbound["settings"].get("decryption", "none") not in ("", "none"), "VLESS ENC 密钥生成失败")
-    inbound["listen"] = "127.0.0.1"
     for client in inbound["settings"]["clients"]:
         client.pop("flow", None)
+    extra = transport_extra(opts, server=True)
+    extra["noSSEHeader"] = opts["mode"] == "stream-one"
+    if profile == "reality":
+        require(inbound["streamSettings"].get("security") == "reality", "入站缺少 REALITY 配置")
+        inbound["streamSettings"]["xhttpSettings"] = {"path": opts["path"], "mode": "auto", "extra": extra}
+        return config
+    inbound["listen"] = "127.0.0.1"
     inbound["streamSettings"] = {"network": "xhttp", "security": "none",
-        "xhttpSettings": {"path": opts["path"], "mode": "auto"}}
+        "xhttpSettings": {"path": opts["path"], "mode": "auto", "extra": extra}}
     if opts["mode"] in STREAM_MODES:
         cert, key = origin_certificate(directory)
         inbound["streamSettings"].update(security="tls", tlsSettings={
             "alpn": ["h2"], "minVersion": "1.2",
             "certificates": [{"certificateFile": str(cert), "keyFile": str(key)}]})
         # A single bidirectional gRPC-like request must not receive an SSE content type.
-        inbound["streamSettings"]["xhttpSettings"]["extra"] = {
-            "noSSEHeader": opts["mode"] == "stream-one"}
     return config
 
 
-def configure(directory, env):
+def configure(directory, env, profile="argo"):
     directory = Path(directory)
-    saved = directory / "xhttp-options.json"
-    opts = saved_options(directory, env)
+    saved = profile_file(directory, profile, "options.json")
+    opts = saved_options(directory, env, profile)
     config_file = directory / "xr.json"
-    config = server_config(json.loads(config_file.read_text()), opts, directory)
+    config = server_config(json.loads(config_file.read_text()), opts, directory, profile)
     json_file(config_file, config)
     json_file(saved, opts)
+    for name in ("private_key", "public_key", "short_id", "enkey", "dekey"):
+        key = directory / "xrk" / name
+        if key.exists():
+            key.chmod(0o600)
 
 
-def export(directory):
+def export(directory, profile="argo"):
     directory = Path(directory)
-    opts = options({}, json.loads((directory / "xhttp-options.json").read_text()))
-    domain = host((directory / "sbargoym.log").read_text().strip(), "固定隧道域名")
-    require(not domain.lower().endswith("trycloudflare.com"), "不支持随机隧道")
+    opts = saved_options(directory, {}, profile)
     config = json.loads((directory / "xr.json").read_text())
-    inbound = next(x for x in config["inbounds"] if x.get("tag") == "vless-xhttp")
+    inbound = next(x for x in config["inbounds"] if x.get("tag") == PROFILES[profile][0])
+    if profile == "argo":
+        domain = host((directory / "sbargoym.log").read_text().strip(), "固定隧道域名")
+        require(not domain.lower().endswith("trycloudflare.com"), "不支持随机隧道")
+        address, port, name = opts.get("address") or domain, 443, "vless-xhttp-argo-tls-enc"
+    else:
+        reality = inbound["streamSettings"]["realitySettings"]
+        domain = host(reality["serverNames"][0], "REALITY SNI")
+        address = opts.get("address") or (directory / "server_ip.log").read_text().strip().strip("[]")
+        host(address, "REALITY 服务器地址")
+        port, name = inbound["port"], "vless-xhttp-reality-enc"
     uid = inbound["settings"]["clients"][0]["id"]
     encryption = (directory / "xrk/enkey").read_text().strip()
     require(encryption.startswith("mlkem768x25519plus."), "缺少有效的 VLESS ENC 客户端密钥")
     settings = stream(opts, domain)
-    address = opts.get("address") or domain
-    name = "vless-xhttp-argo-tls-enc"
+    if profile == "reality":
+        public_key = (directory / "xrk/public_key").read_text().strip()
+        require(bool(re.fullmatch(r'[A-Za-z0-9_-]{43}', public_key)), "REALITY 公钥无效")
+        settings.pop("tlsSettings")
+        settings.update(security="reality", realitySettings={"serverName": domain,
+            "fingerprint": "chrome", "password": public_key, "shortId": reality["shortIds"][0]})
     outbound = {"tag": name, "protocol": "vless", "settings": {"vnext": [{
-        "address": address, "port": 443, "users": [{"id": uid, "encryption": encryption}]}]},
+        "address": address, "port": port, "users": [{"id": uid, "encryption": encryption}]}]},
         "streamSettings": settings}
     client = {"log": {"loglevel": "warning"}, "inbounds": [{"tag": "socks-in",
         "listen": "127.0.0.1", "port": 10808, "protocol": "socks",
         "settings": {"auth": "noauth", "udp": True}}], "outbounds": [outbound]}
-    json_file(directory / "xhttp-client.json", client)
+    client_file = profile_file(directory, profile, "client.json")
+    uri_file = profile_file(directory, profile, "uri.txt")
+    json_file(client_file, client)
     query = {"encryption": encryption, "security": "tls", "sni": domain,
              "alpn": opts["alpn"], "type": "xhttp", "host": domain,
              "path": opts["path"], "mode": opts["mode"],
              "extra": json.dumps(settings["xhttpSettings"]["extra"], separators=(",", ":"))}
     if opts["alpn"] == "h2":
         query["fp"] = "chrome"
+    if profile == "reality":
+        query.update(security="reality", pbk=public_key, sid=reality["shortIds"][0])
     # No standardized share-URI field carries streamSettings.finalmask.
     # Never advertise a degraded link as the requested masked combination.
     if opts["finalmask"] != "off" or opts["download_finalmask"] != "off":
-        write_private(directory / "xhttp-uri.txt", "")
-        print("FinalMask 已启用，请导入 xhttp-client.json；普通 URI 无法完整携带此配置。")
+        write_private(uri_file, "")
+        print("FinalMask 已启用，请导入 " + client_file.name + "；普通 URI 无法完整携带此配置。")
     else:
         authority = "[" + address + "]" if ":" in address else address
-        uri = "vless://" + uid + "@" + authority + ":443?" + urlencode(query, quote_via=quote) + "#" + name
-        write_private(directory / "xhttp-uri.txt", uri + "\n")
+        uri = "vless://" + uid + "@" + authority + ":" + str(port) + "?" + urlencode(query, quote_via=quote) + "#" + name
+        write_private(uri_file, uri + "\n")
         print(uri)
-    print("完整 Xray 客户端配置：" + str(directory / "xhttp-client.json"))
-    origin_info(directory)
+    print("完整 Xray 客户端配置：" + str(client_file))
+    if profile == "argo":
+        origin_info(directory)
+    else:
+        print("REALITY 直连 TCP 端口：" + str(port) + "；请放行服务器防火墙和安全组。")
 
 
 def main():
     try:
         command = sys.argv[1]
+        profile = "reality" if command.endswith("-reality") else "argo"
+        command = command[:-8] if profile == "reality" else command
         if command == "validate":
-            saved_options(sys.argv[2], os.environ) if len(sys.argv) > 2 else options(os.environ)
+            saved_options(sys.argv[2], os.environ, profile) if len(sys.argv) > 2 else options(os.environ, profile=profile)
         elif command == "configure":
-            configure(sys.argv[2], os.environ)
+            configure(sys.argv[2], os.environ, profile)
         elif command == "export":
-            export(sys.argv[2])
+            export(sys.argv[2], profile)
         elif command == "origin-info":
             origin_info(sys.argv[2])
         elif command == "subscribe":
-            uri = (Path(sys.argv[2]) / "xhttp-uri.txt").read_text()
             for path in set(sys.argv[3:]):
-                update_subscription(path, uri)
+                sync_subscription(sys.argv[2], profile, path)
         elif command == "install-xray":
             install_xray(sys.argv[2])
         else:

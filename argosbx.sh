@@ -12,7 +12,7 @@ elif [ -s "$_agsbx_dir/../../lib/argo.sh" ]; then
 else
     mkdir -p "$HOME/agsbx/lib"
     if [ ! -s "$HOME/agsbx/lib/argo.sh" ] || [ "${1:-}" = rep ] ||
-       ! grep -q "^ARGOSBX_CLI_REV=1$" "$HOME/agsbx/lib/argo.sh"; then
+       ! grep -q "^ARGOSBX_CLI_REV=2$" "$HOME/agsbx/lib/argo.sh"; then
         _agsbx_tmp=$(mktemp "$HOME/agsbx/lib/argo.XXXXXX") || exit 1
         if (command -v curl >/dev/null 2>&1 && curl -fLsS --retry 2 "$ARGOSBX_BASE/lib/argo.sh" -o "$_agsbx_tmp") ||
            (command -v wget >/dev/null 2>&1 && wget -qO "$_agsbx_tmp" "$ARGOSBX_BASE/lib/argo.sh"); then
@@ -30,7 +30,7 @@ mkdir -p "$HOME/agsbx"
 url="$ARGOSBX_BASE/argosbx.sh"
 case "${*##* }" in list|del|upx|ups|upa|res) ;; *)
 cmd=""
-for v in uuid vlpt vmpt vwpt hypt tupt xhpt vxpt anpt arpt sspt sopt nvpt xupt xcpt reym cdnym argo agn agk agproto agqc ARGOSBX_REF warp name oap xhttp_mode xhttp_alpn xhttp_path xhttp_xmux xhttp_finalmask xhttp_address xhttp_download_address xhttp_download_port xhttp_download_host xhttp_download_servername xhttp_download_alpn xhttp_download_finalmask; do
+for v in $(for _profile in xhttp reality; do for _field in mode alpn path xmux finalmask address padding_bytes max_post_bytes min_post_interval_ms fragment_length fragment_interval fragment_count download_address download_port download_host download_servername download_alpn download_finalmask; do printf '%s_%s ' "$_profile" "$_field"; done; done) uuid vlpt vmpt vwpt hypt tupt xhpt vxpt anpt arpt sspt sopt nvpt xupt xcpt reym cdnym argo agn agk agproto agqc ARGOSBX_REF warp name oap; do
 if [ -n "${!v+x}" ]; then
     if [ "$v" = agk ]; then
         cmd+="agk='<redacted>' "
@@ -1423,10 +1423,14 @@ sskey=$(cat "$HOME/agsbx/sskey" 2>/dev/null)
 fi
 if grep xhttp-reality "$HOME/agsbx/xr.json" >/dev/null 2>&1; then
 echo "💣【 Vless-xhttp-reality-enc 】支持ENC加密，节点信息如下："
+if [ -s "$HOME/agsbx/xhttp-reality-options.json" ]; then
+argo_reality_export "$HOME/agsbx/jhsub.txt" || return 1
+else
 port_xh=$(cat "$HOME/agsbx/port_xh")
 vl_xh_link="vless://$uuid@$server_ip:$port_xh?encryption=$enkey&flow=xtls-rprx-vision&security=reality&sni=$ym_vl_re&fp=chrome&pbk=$public_key_x&sid=$short_id_x&type=xhttp&path=$uuid-xh&mode=auto#${sxname}vl-xhttp-reality-enc-$hostname"
 echo "$vl_xh_link" >> "$HOME/agsbx/jhsub.txt"
 echo "$vl_xh_link"
+fi
 echo
 fi
 if grep vless-xhttp "$HOME/agsbx/xr.json" >/dev/null 2>&1 && [ ! -s "$HOME/agsbx/xhttp-options.json" ]; then
@@ -2536,6 +2540,8 @@ showmode
 exit
 elif [ "$1" = "rep" ]; then
 [ "$argo" = vxpt ] || rm -f "$HOME/agsbx/xhttp-options.json"
+[ -n "${xhpt+x}" ] || rm -f "$HOME/agsbx/xhttp-reality-options.json"
+rm -f "$HOME/agsbx/xhttp-reality-client.json" "$HOME/agsbx/xhttp-reality-uri.txt"
 cleandel
 rm -rf "$HOME/agsbx"/{sb.json,xr.json,sbargoym.log,sbargotoken.log,argo.log,argoport.log,cdnym,name,xhttp-client.json,xhttp-uri.txt,xhttp-tunnel-ingress.json}
 echo "Argosbx重置协议完成，开始更新相关协议变量……" && sleep 2

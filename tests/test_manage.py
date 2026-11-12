@@ -216,7 +216,8 @@ class EntryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary:
             env = {k: v for k, v in os.environ.items() if k not in manage.PROTOCOLS}
             env['ARGOSBX_STATE_DIR'] = temporary
-            for args, status in [([], 0), (['help'], 0), (['--help'], 0), (['nonsense'], 2), (['setup'], 1)]:
+            for args, status in [([], 0), (['help'], 0), (['--help'], 0), (['nonsense'], 2), (['setup'], 1),
+                                 (['xhttp'], 1), (['tune'], 1)]:
                 result = subprocess.run(['bash', str(ROOT / 'argosbx.sh'), *args], env=env,
                                         cwd=temporary, capture_output=True, text=True, timeout=10)
                 self.assertEqual(result.returncode, status, result.stdout + result.stderr)

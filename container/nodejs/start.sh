@@ -10,7 +10,8 @@ elif [ -s "$_agsbx_dir/../../lib/argo.sh" ]; then
     . "$_agsbx_dir/../../lib/argo.sh"
 else
     mkdir -p "$HOME/agsbx/lib"
-    if [ ! -s "$HOME/agsbx/lib/argo.sh" ] || [ "${1:-}" = rep ]; then
+    if [ ! -s "$HOME/agsbx/lib/argo.sh" ] || [ "${1:-}" = rep ] ||
+       ! grep -q '^ARGOSBX_CLI_REV=2$' "$HOME/agsbx/lib/argo.sh"; then
         _agsbx_tmp=$(mktemp "$HOME/agsbx/lib/argo.XXXXXX") || exit 1
         if (command -v curl >/dev/null 2>&1 && curl -fLsS --retry 2 "$ARGOSBX_BASE/lib/argo.sh" -o "$_agsbx_tmp") ||
            (command -v wget >/dev/null 2>&1 && wget -qO "$_agsbx_tmp" "$ARGOSBX_BASE/lib/argo.sh"); then
@@ -1000,10 +1001,14 @@ sskey=$(cat "$HOME/agsbx/sskey" 2>/dev/null)
 fi
 if grep xhttp-reality "$HOME/agsbx/xr.json" >/dev/null 2>&1; then
 echo "💣【 Vless-xhttp-reality-enc 】支持ENC加密，节点信息如下："
+if [ -s "$HOME/agsbx/xhttp-reality-options.json" ]; then
+argo_reality_export "$HOME/agsbx/jh.txt" || return 1
+else
 xhpt=$(cat "$HOME/agsbx/xhpt")
 vl_xh_link="vless://$uuid@$server_ip:$xhpt?encryption=$enkey&flow=xtls-rprx-vision&security=reality&sni=$reym&fp=chrome&pbk=$public_key_x&sid=$short_id_x&type=xhttp&path=$uuid-xh&mode=auto#${sxname}vl-xhttp-reality-$hostname"
 echo "$vl_xh_link" >> "$HOME/agsbx/jh.txt"
 echo "$vl_xh_link"
+fi
 echo
 fi
 if grep vless-xhttp "$HOME/agsbx/xr.json" >/dev/null 2>&1 && [ ! -s "$HOME/agsbx/xhttp-options.json" ]; then

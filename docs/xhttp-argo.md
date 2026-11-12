@@ -1,5 +1,7 @@
 # 固定 Argo + XHTTP 增强版
 
+主脚本菜单 **10**（`agsbx xhttp`）现可一次安装 REALITY + 固定 Argo 两种 XHTTP ENC 节点，并分别选择 XMUX、FinalMask、填充、分包等设置。已有安装通过该入口调整现有节点，不会自动重建其他协议；完整步骤见 [README 的 XHTTP 专区](../README.md#xhttp-一键搭建与增强)。本文主要说明固定 Argo 链路。
+
 支持 `VLESS + XHTTP + 固定 Cloudflare Tunnel + TLS + VLESS Encryption`，并可组合客户端 HTTP/3、cloudflared QUIC、XMUX、上下行分离和 TLS 分片。模式包含默认的 `packet-up` 和实验性的 `stream-up` / `stream-one`。
 
 ## 快速开始
@@ -121,6 +123,8 @@ bash "$HOME/bin/agsbx"
 
 ## 组合参数
 
+无需手写参数时运行 `agsbx tune --profile argo`。REALITY 的对应入口是 `agsbx tune --profile reality`，使用独立的 `reality_*` 参数与 `xhttp-reality-client.json` 导出文件，仅使用 H2。两种节点的设置不会互相覆盖。
+
 在快速开始的命令前增加以下环境变量即可；修改已安装配置时，在完整命令末尾加 `rep`。`rep` 会重建协议，须带上要保留的其它协议参数。XHTTP 高级选项省略时保留旧值，显式 `xhttp_download_address=''` 并清空对应下行参数可关闭分离，`xhttp_finalmask=off` 可关闭分片。
 
 | 参数 | 默认 | 作用 |
@@ -132,6 +136,12 @@ bash "$HOME/bin/agsbx"
 | `xhttp_path` | 随机生成并保存 | 自定义 `/path`；仅支持字母、数字、`/`、`_`、`-` |
 | `xhttp_xmux` | 下述默认值 | XMUX JSON 对象；部分覆盖仍补齐其它限制 |
 | `xhttp_finalmask` | `off` | `off` / `tls-fragment`，仅用于 H2 |
+| `xhttp_padding_bytes` | `100-1000` | HTTP 填充字节范围 |
+| `xhttp_max_post_bytes` | `1000000` | `packet-up` 单次 POST 字节上限，双端同步 |
+| `xhttp_min_post_interval_ms` | `30` | `packet-up` POST 发送间隔毫秒范围 |
+| `xhttp_fragment_length` | `100-200` | TLS 分片长度字节范围 |
+| `xhttp_fragment_interval` | `0-1` | TLS 分片间隔毫秒范围 |
+| `xhttp_fragment_count` | `2-3` | 最大分片数量范围 |
 | `xhttp_download_address` | 空，不分离 | 下行域名或 IP |
 | `xhttp_download_port` | `443` | 下行 TLS 端口 |
 | `xhttp_download_servername` | 下行域名 | 下行 SNI/证书名称；地址为 IP 时必填 |
@@ -230,6 +240,8 @@ docker run -d --name argosbx-enhanced --restart unless-stopped \
 Node 入口与主脚本共享配置生成器；初始化失败时容器退出。原订阅路径为 `/<UUID>`，完整配置为 `/<UUID>/xhttp.json`。这些路径含节点凭据，请自行限制访问。默认回源为 `http://127.0.0.1:8080`；通过 `-e xhttp_mode=stream-up` 或 `stream-one` 启用流式模式时，改为 HTTPS 并应用上面的 HTTP/2 回源设置，CA Pool 填 `/root/agsbx/xhttp-origin.crt`。回源不使用网页服务的 3000 端口。
 
 仓库保留的 SAP 批量部署脚本是旧版流程，使用原作者镜像，只适用于原有协议；不提供本增强版 XHTTP 组合。其 Argo 配置也必须提供固定域名和 Token。
+
+同一增强 Node 容器可通过 `-e xhpt=443 -e reym=目标域名 -e reality_address=服务器公网地址` 启用 REALITY；需映射对应 TCP 端口。完整配置下载路径为 `/<UUID>/xhttp-reality.json`，与 Argo 的 `/<UUID>/xhttp.json` 分开。也可继续添加 `reality_xmux`、`reality_finalmask` 等环境变量。
 
 ## 验证范围
 

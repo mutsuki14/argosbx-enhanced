@@ -16,6 +16,7 @@ import threading
 import time
 
 from test_xhttp import xhttp, ConfigTests
+from test_suite import add_reality
 
 
 def port():
@@ -107,7 +108,9 @@ def main():
         try:
             for name, env in [
                 ("h2-packet", {}),
-                ("h2-fragment", {"xhttp_finalmask": "tls-fragment"}),
+                ("h2-fragment", {"xhttp_finalmask": "tls-fragment", "xhttp_xmux": '{"maxConnections":4}',
+                                 "xhttp_fragment_length": "50-100", "xhttp_padding_bytes": "100-300",
+                                 "xhttp_max_post_bytes": 524288, "xhttp_min_post_interval_ms": "10-20"}),
                 ("split", {"xhttp_download_address": "down.example.com"}),
                 ("split-fragment", {"xhttp_download_address": "down.example.com", "xhttp_download_finalmask": "tls-fragment"}),
                 ("h3", {"xhttp_alpn": "h3"}),
@@ -117,6 +120,15 @@ def main():
                                      "xhttp_download_finalmask": "tls-fragment"}),
                 ("stream-one", {"xhttp_mode": "stream-one"}),
                 ("stream-one-fragment", {"xhttp_mode": "stream-one", "xhttp_finalmask": "tls-fragment"}),
+                ("reality-packet", {"reality_mode": "packet-up", "reality_max_post_bytes": 524288,
+                                    "reality_min_post_interval_ms": "10-20"}),
+                ("reality-packet-fragment", {"reality_mode": "packet-up", "reality_finalmask": "tls-fragment"}),
+                ("reality-stream-up", {"reality_mode": "stream-up", "reality_xmux": '{"maxConnections":4}'}),
+                ("reality-stream-up-fragment", {"reality_mode": "stream-up", "reality_finalmask": "tls-fragment"}),
+                ("reality-stream-one", {"reality_mode": "stream-one"}),
+                ("reality-stream-one-fragment", {"reality_mode": "stream-one", "reality_finalmask": "tls-fragment",
+                        "reality_fragment_length": "50-100", "reality_fragment_interval": "0-2",
+                        "reality_fragment_count": "3-4", "reality_padding_bytes": "100-300"}),
             ]:
                 processes = []
                 handles = []
@@ -126,9 +138,19 @@ def main():
                 test.setUp()
                 try:
                     client = test.produce(env)
+                    reality = name.startswith('reality-')
+                    if reality:
+                        add_reality(test.directory, xray)
+                        xhttp.configure(test.directory, env, 'reality')
+                        import contextlib
+                        import io
+                        with contextlib.redirect_stdout(io.StringIO()):
+                            xhttp.export(test.directory, 'reality')
+                        client = json.loads((test.directory / 'xhttp-reality-client.json').read_text())
                     server = json.loads((test.directory / "xr.json").read_text())
                     origin_port, socks_port = port(), port()
-                    server["inbounds"] = server["inbounds"][:1]
+                    server["inbounds"] = server["inbounds"][-1:] if reality else server["inbounds"][:1]
+                    server["inbounds"][0]["listen"] = '127.0.0.1'
                     server["inbounds"][0]["port"] = origin_port
                     # Xray defaults reject private destinations; allow only this test echo endpoint.
                     server["outbounds"][0]["settings"] = {"finalRules": [{"action": "allow",
@@ -156,9 +178,13 @@ def main():
                             time.sleep(.05)
                         addresses = json.loads(ready.read_text())
                         upload_port, down_port = [int(a.rsplit(":", 1)[1]) for a in addresses]
+                        if reality:
+                            server['inbounds'][0]['streamSettings']['realitySettings']['target'] = '127.0.0.1:' + str(upload_port)
+                            upload_port = origin_port
                     client["inbounds"][0]["port"] = socks_port
                     client["outbounds"][0]["settings"]["vnext"][0].update(address="127.0.0.1", port=upload_port)
-                    stream["tlsSettings"]["certificates"] = [{"certificateFile": str(cert), "usage": "verify"}]
+                    if not reality:
+                        stream["tlsSettings"]["certificates"] = [{"certificateFile": str(cert), "usage": "verify"}]
                     if "downloadSettings" in stream["xhttpSettings"]["extra"]:
                         down = stream["xhttpSettings"]["extra"]["downloadSettings"]
                         down.update(address="127.0.0.1", port=down_port)
@@ -179,7 +205,7 @@ def main():
                     assert result.returncode == 0, result.stderr.decode()
                     assert hashlib.sha256(payload).digest() == hashlib.sha256(result.stdout).digest(), "Transfer mismatch"
                     check_duplex(socks_port, duplex.server_address[1])
-                    if name != "h3":
+                    if name != "h3" and not reality:
                         proxy_log = (case / "proxy.log").read_text()
                         assert "HTTP/2.0" in proxy_log
                         if streaming:
@@ -187,7 +213,8 @@ def main():
                             assert "content-type=application/grpc" in proxy_log, "streaming header missing"
                             if env["xhttp_mode"] == "stream-one":
                                 assert "response-type=text/event-stream" not in proxy_log
-                    print(name + ": 256 KiB ENC transfer + server-first/interleaved duplex passed, TLS verified", flush=True)
+                    print(name + ": 256 KiB ENC transfer + server-first/interleaved duplex passed, " +
+                          ('REALITY authenticated' if reality else 'TLS verified'), flush=True)
                 except Exception:
                     for handle in handles:
                         handle.flush()

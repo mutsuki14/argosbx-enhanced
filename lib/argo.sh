@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Shared by the VPS installer and the Node container entry point.
 ARGOSBX_STATE_DIR=${ARGOSBX_STATE_DIR:-$HOME/agsbx}
-ARGOSBX_CLI_REV=1
+ARGOSBX_CLI_REV=2
 
 argo_error() { printf 'Argo 配置错误：%s\n' "$*" >&2; return 1; }
 
@@ -79,11 +79,11 @@ argo_python() {
 }
 
 argo_manage() {
-    if [ "${1:-}" = setup ] && [ ! -t 0 ]; then
+    if { [ "${1:-}" = setup ] || [ "${1:-}" = xhttp ] || [ "${1:-}" = tune ]; } && [ ! -t 0 ]; then
         echo '安装向导需要交互终端；自动部署请继续使用环境变量命令，运行 agsbx help 查看示例。' >&2
         return 1
     fi
-    if [ "${1:-}" = setup ] || [ "${1:-}" = upgrade ]; then
+    if [ "${1:-}" = setup ] || [ "${1:-}" = xhttp ] || [ "${1:-}" = upgrade ]; then
         argo_require_python || return 1
     elif ! command -v python3 >/dev/null 2>&1; then
         printf '此命令需要 Python 3；首次安装请运行 agsbx setup。\n' >&2
@@ -101,6 +101,9 @@ Argosbx Enhanced — 固定 Argo / XHTTP
 
   agsbx                         打开菜单（终端中）
   agsbx setup [--dry-run]        首次安装向导；Token 输入不显示
+  agsbx xhttp [--dry-run]        XHTTP 专区：REALITY / 固定 Argo / 双节点搭建
+  agsbx tune --profile reality   调整已安装节点的 XMUX、FinalMask 等参数
+    --profile argo              调整固定 Argo 节点（默认）
   agsbx status                  查看本机状态，不显示凭据
   agsbx upgrade                 更新管理脚本，保留节点配置
   agsbx doctor [--network]       检查配置、进程、回源；可选公网 TLS 检查
@@ -111,6 +114,7 @@ Argosbx Enhanced — 固定 Argo / XHTTP
     可加 --dry-run 预览，--finalmask off|tls-fragment 调整上行分片
   agsbx tunnel                  查看 Cloudflare 应填写的回源设置
   agsbx export [目标文件]        导出 JSON，默认 ./xhttp-client.json
+    --profile reality           导出 REALITY 节点，默认 ./xhttp-reality-client.json
   agsbx export --uri            显示分享链接（FinalMask 请用 JSON）
   agsbx logs [--lines 50]        查看脱敏日志
   agsbx list / res               原有节点列表 / 重启全部服务
@@ -129,7 +133,7 @@ agsbx_menu() {
     [ -t 0 ] || { echo '菜单需要交互终端；运行 agsbx help 查看命令。' >&2; return 2; }
     local choice profile
     while :; do
-        printf '\nArgosbx Enhanced\n1) 首次安装向导  2) 查看状态  3) 切换传输方案\n4) 检查连接配置  5) Cloudflare 回源设置\n6) 导出客户端 JSON  7) 查看日志  8) 完整帮助\n9) 更新管理脚本  0) 退出\n'
+        printf '\nArgosbx Enhanced\n1) 固定 Argo 安装向导  2) 查看状态  3) 切换传输方案\n4) 检查连接配置  5) Cloudflare 回源设置\n6) 导出客户端 JSON  7) 查看日志  8) 完整帮助\n9) 更新管理脚本  10) XHTTP 一键搭建与增强（REALITY / Argo / 双节点）\n0) 退出\n'
         read -r -p '请选择 [0]：' choice || return 0
         case "${choice:-0}" in
             0) return 0 ;;
@@ -152,6 +156,7 @@ agsbx_menu() {
             7) argo_manage logs ;;
             8) agsbx_help ;;
             9) argo_manage upgrade ;;
+            10) argo_manage xhttp ;;
             *) echo '请输入菜单中的数字。' ;;
         esac
     done
@@ -161,7 +166,7 @@ argo_cli_dispatch() {
     case "${1:-}" in
         help|-h|--help) agsbx_help; exit 0 ;;
         menu) agsbx_menu; exit $? ;;
-        setup|upgrade|status|doctor|mode|tunnel|export|logs) argo_manage "$@"; exit $? ;;
+        setup|xhttp|tune|upgrade|status|doctor|mode|tunnel|export|logs) argo_manage "$@"; exit $? ;;
         list|rep|res|upx|ups|upa|del) return 0 ;;
         '')
             local variable
@@ -178,6 +183,9 @@ argo_preflight() {
     if [ "${argo:-}" = vxpt ]; then
         # Validate the effective saved + requested configuration before rep stops services.
         argo_python validate "$ARGOSBX_STATE_DIR" || return 1
+    fi
+    if [ -n "${xhpt+x}" ]; then
+        argo_python validate-reality "$ARGOSBX_STATE_DIR" || return 1
     fi
     case "${1:-}" in
         upa) argo_saved || return 1 ;;
@@ -243,11 +251,28 @@ argo_origin_hint() {
 }
 
 argo_xhttp_configure() {
-    [ "${argo:-}" = vxpt ] || return 0
-    argo_python configure "$ARGOSBX_STATE_DIR" || return 1
+    local configured=0
+    if [ "${argo:-}" = vxpt ]; then
+        argo_python configure "$ARGOSBX_STATE_DIR" || return 1
+        configured=1
+    fi
+    if grep -q '"tag":"xhttp-reality"' "$ARGOSBX_STATE_DIR/xr.json" ||
+       grep -q '"tag": "xhttp-reality"' "$ARGOSBX_STATE_DIR/xr.json"; then
+        argo_python configure-reality "$ARGOSBX_STATE_DIR" || return 1
+        configured=1
+    fi
+    [ "$configured" = 1 ] || return 0
     "$ARGOSBX_STATE_DIR/xray" run -test -c "$ARGOSBX_STATE_DIR/xr.json" || {
         argo_error 'Xray 配置校验失败，请升级到支持 XHTTP 和 VLESS ENC 的内核'; return 1;
     }
+}
+
+argo_reality_export() {
+    local summary
+    summary=$(argo_python export-reality "$ARGOSBX_STATE_DIR") || return 1
+    "$ARGOSBX_STATE_DIR/xray" run -test -c "$ARGOSBX_STATE_DIR/xhttp-reality-client.json" >/dev/null || return 1
+    printf '%s\n' "$summary"
+    argo_python subscribe-reality "$ARGOSBX_STATE_DIR" "$1" "$ARGOSBX_STATE_DIR/jh.txt"
 }
 
 argo_xhttp_export() {

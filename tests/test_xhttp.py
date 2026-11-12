@@ -221,17 +221,24 @@ class ConfigTests(unittest.TestCase):
                 functions = "\n".join(fragments).replace("$HOME/agsbx", "$ARGOSBX_STATE_DIR")
                 env = dict(os.environ, ARGOSBX_STATE_DIR=str(self.directory), argo="vxpt", vxp="yes",
                     vxpt="18080", port_vx="18080", uuid="797024ab-d2a8-41ed-91d8-b615917fcac5",
+                    xhp="yes", xhpt="18443", port_xh="18443", reym="www.microsoft.com", ym_vl_re="www.microsoft.com",
                     pvk=base64.b64encode(bytes(range(32))).decode(), wpv6="2606:4700:110::1", res="[1,2,3]",
                     xip='"0.0.0.0/0", "::/0"', x1outtag="direct", x2outtag="direct", xsdns="8.8.8.8",
-                    xendip="162.159.192.1", xryx="ForceIPv4", wxryx="ForceIPv4", xhttp_mode=mode)
+                    xendip="162.159.192.1", xryx="ForceIPv4", wxryx="ForceIPv4", xhttp_mode=mode,
+                    reality_mode=mode, reality_finalmask="tls-fragment", reality_xmux='{"maxConnections":4}')
                 script = 'source "$1"\n' + functions + '\nnohup(){ :; }; pidof(){ return 1; }; installxray; xrsbout'
                 result = subprocess.run(["bash", "-c", script, "test", str(ROOT / "lib/argo.sh")],
                                         env=env, capture_output=True, text=True)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-                self.assertEqual(json.loads((self.directory / "xr.json").read_text())["inbounds"][0]["listen"],
-                                 "127.0.0.1")
-                actual = json.loads((self.directory / "xr.json").read_text())["inbounds"][0]
+                inbounds = json.loads((self.directory / "xr.json").read_text())["inbounds"]
+                actual = next(i for i in inbounds if i['tag'] == 'vless-xhttp')
+                self.assertEqual(actual['listen'], '127.0.0.1')
                 self.assertEqual(actual["streamSettings"]["security"], "none" if mode == "packet-up" else "tls")
+                direct = next(i for i in inbounds if i['tag'] == 'xhttp-reality')
+                self.assertEqual(direct['streamSettings']['security'], 'reality')
+                self.assertNotIn('flow', direct['settings']['clients'][0])
+                self.assertNotEqual(direct['streamSettings']['xhttpSettings']['path'], actual['streamSettings']['xhttpSettings']['path'])
+                self.assertEqual(xhttp.saved_options(self.directory, {}, 'reality')['mode'], mode)
 
 
 class FixedTunnelTests(unittest.TestCase):

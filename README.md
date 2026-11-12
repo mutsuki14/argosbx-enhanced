@@ -10,9 +10,11 @@
 
 在终端直接运行 **`agsbx` 打开管理菜单**。首次安装有向导，日常可用 `status` 查看状态、`mode` 切换方案、`doctor` 排查连接、`export` 导出客户端，原有环境变量命令继续可用。
 
+**新增菜单 10：XHTTP 一键搭建与增强。** 可选择 `VLESS-XHTTP-REALITY-ENC`、`VLESS-XHTTP-固定 Argo-TLS-ENC`，或一次部署两种节点；分别调整 XMUX、FinalMask、传输模式、填充和分包参数。已有节点进入该选项可直接调整增强设置。
+
 > **本项目的所有 Argo 入口只支持固定隧道。** 必须同时提供固定域名和 Tunnel Token；缺失时停止部署，不创建或恢复 `trycloudflare.com` 随机隧道。VMess / VLESS WebSocket 的 Argo 入口同样遵守这一规则。
 
-[快速部署](#快速部署) · [客户端导入](#客户端导入) · [增强组合](#增强组合) · [管理与更新](#管理与更新) · [参数参考](#参数参考) · [Docker 部署](#docker-部署) · [常见问题](#常见问题)
+[快速部署](#快速部署) · [XHTTP 专区](#xhttp-一键搭建与增强) · [客户端导入](#客户端导入) · [增强组合](#增强组合) · [管理与更新](#管理与更新) · [参数参考](#参数参考) · [Docker 部署](#docker-部署) · [常见问题](#常见问题)
 
 ## 功能与适用入口
 
@@ -35,7 +37,7 @@
 | `anpt` / `arpt` | AnyTLS / AnyTLS REALITY |
 | `sspt` / `sopt` / `nvpt` | Shadowsocks 2022 / SOCKS5 / NaiveProxy |
 
-这些参数指定各自的监听端口。本文的 `xhttp_*` 增强参数用于 **`vxpt` + `argo=vxpt`**；其他协议的选项、WARP 出站等可通过网页生成器配置。
+这些参数指定各自的监听端口。`xhttp_*` 增强参数用于 **`vxpt` + `argo=vxpt`**；**`xhpt` REALITY 节点使用独立的 `reality_*` 同名参数**。其他协议的选项、WARP 出站等可通过网页生成器配置。
 
 ## 链路结构
 
@@ -107,6 +109,61 @@ bash "$HOME/bin/agsbx" list
 
 无交互终端且未提供参数时，脚本只显示帮助，不会等待输入或开始安装。
 
+## XHTTP 一键搭建与增强
+
+在 `agsbx` 菜单选择 **10**，或直接运行：
+
+```bash
+# 首次使用，可直接启动专区
+bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh) xhttp
+
+# 已安装管理脚本
+agsbx xhttp
+```
+
+首次安装依次选择 **双节点 / 仅 REALITY / 仅固定 Argo**，填写必要参数并确认摘要。双节点默认 REALITY 公网 TCP 端口 `443`、Argo 回环端口 `8080`，两端口不能相同。REALITY 需填写服务器公网 IP 或域名、目标站域名；目标站须在服务器侧可达并支持 TLS 1.3/H2。Argo 的 Token 使用隐藏输入，仍只支持固定隧道。
+
+| 设置 | 可选内容 |
+| --- | --- |
+| 传输模式 | `packet-up`、`stream-up`、`stream-one`；Argo 分包模式另可选择 H3 |
+| XMUX | 均衡、低复用、固定 4 连接，或逐项自定义并发数、复用次数、请求上限、生命周期和保活 |
+| FinalMask | 开关 TLS ClientHello 分片；可调整分片长度、间隔和最大数量 |
+| 地址与路径 | 自定义连接地址、保留或重新生成随机 XHTTP 路径 |
+| HTTP / 分包参数 | 填充字节、`packet-up` 每次 POST 字节上限和发送间隔 |
+| Argo 下行分离 | 下行地址、端口、Host、SNI、H2/H3 与独立的 TLS 分片开关 |
+| 隧道连接协议 | 固定 Argo 可选 QUIC、HTTP2 或自动 |
+
+两种节点的参数、随机路径和导出文件独立保存。REALITY 默认 **H2 / stream-one**，Argo 默认 **H2 / packet-up**；REALITY 不支持 H3，此处的 REALITY 直连预设也不配置下行分离。Argo 的 `stream-one` 不能使用下行分离；流式 Argo 仍需按下一节配置 HTTPS/H2 回源。
+
+XMUX 预设控制复用行为，不代表带宽保证；增加连接数可能增加资源消耗。FinalMask 用于分片，可能增加延迟，并非加速开关。相关字段依据 [XHTTP 官方说明](https://github.com/XTLS/Xray-core/discussions/4113)与 [FinalMask 文档](https://xtls.github.io/config/transports/finalmask.html)，并经过本项目的真实内核测试。
+
+已有节点可分别调整、预览和导出：
+
+```bash
+agsbx tune --profile reality --dry-run
+agsbx tune --profile reality
+agsbx tune --profile argo
+agsbx mode stream-up --profile reality
+agsbx export --profile reality ~/reality-client.json
+agsbx export --profile argo ~/argo-client.json
+agsbx doctor --profile reality
+```
+
+只安装一种增强节点时，管理命令自动选择该节点；双节点省略 `--profile` 时选择 Argo。旧版 `xhpt` 节点可以通过 `tune --profile reality` 迁移至独立增强配置。应用前校验并备份，失败恢复；修改后重新导入客户端。新建协议组合仅用于首次安装，已有安装的专区用于调整现有节点；增加协议仍使用完整参数命令加 `rep`，须带上要保留的所有协议。
+
+自动部署双节点示例：
+
+```bash
+xhpt=443 reym=www.microsoft.com reality_address=你的服务器IP \
+reality_mode=stream-one reality_finalmask=tls-fragment \
+reality_xmux='{"maxConcurrency":"4-8","cMaxReuseTimes":"64-128"}' \
+vxpt=8080 argo=vxpt agn=up.example.com agk='你的固定隧道Token' \
+xhttp_mode=packet-up xhttp_alpn=h2 \
+bash <(curl -fLsS https://raw.githubusercontent.com/mutsuki14/argosbx-enhanced/main/argosbx.sh)
+```
+
+仅安装 REALITY 时保留 `xhpt`、`reym` 和 `reality_*` 即可，不需要 Argo 域名或 Token。脚本不会自动修改云平台安全组：放行 REALITY 的公网 TCP 端口；Argo 的本机回环端口无需开放。
+
 ## 流式模式（实验性）
 
 | 模式 | 客户端连接 | 本机回源 | 上下行分离 |
@@ -157,6 +214,8 @@ Cloudflare 官方目前仍将公开主机名上的 gRPC 列为未支持场景，
 运行 `agsbx list` 可重新导出配置。文件包含节点凭据，应作为私有配置保存。
 
 也可运行 `agsbx export ~/xhttp-client.json` 直接导出到指定位置；省略路径时写入当前目录的 `xhttp-client.json`。输出文件权限为 `600`，指定目标文件存在时会覆盖。`agsbx export --uri` 仅显示分享链接；不会把缺少 FinalMask 设置的链接当作完整配置。
+
+REALITY 对应 `~/agsbx/xhttp-reality-client.json`、`xhttp-reality-uri.txt` 和 `xhttp-reality-options.json`，使用 `agsbx export --profile reality` 导出。启用 FinalMask 时，该节点同样仅提供完整 JSON。
 
 **只要任一方向启用 FinalMask，就必须使用完整 JSON。** 此时 `xhttp-uri.txt` 留空，避免生成缺少分片设置的链接。支持普通 VLESS 链接，不代表支持这些高级字段。
 
@@ -258,6 +317,12 @@ xhttp_alpn=h2 xhttp_finalmask=tls-fragment \
 | `xhttp_path` | 随机生成并保存 | 以 `/` 开头，只含字母、数字、`/`、`_`、`-`，总长 2–201 字符 |
 | `xhttp_xmux` | 上述 JSON | XMUX 配置对象 |
 | `xhttp_finalmask` | `off` | `off` 或 `tls-fragment`；分片要求 H2 |
+| `xhttp_padding_bytes` | `100-1000` | HTTP 填充字节范围，允许 0–65536 |
+| `xhttp_max_post_bytes` | `1000000` | `packet-up` 单次 POST 字节上限，服务端与客户端同步，允许 1–16000000 |
+| `xhttp_min_post_interval_ms` | `30` | `packet-up` POST 间隔毫秒，允许 0–60000 |
+| `xhttp_fragment_length` | `100-200` | TLS 分片长度字节范围，允许 1–65536 |
+| `xhttp_fragment_interval` | `0-1` | 分片间隔毫秒范围，允许 0–1000 |
+| `xhttp_fragment_count` | `2-3` | 最大分片数量范围，允许 1–1000 |
 | `xhttp_download_address` | 空，不分离 | 下行连接域名或 IP |
 | `xhttp_download_port` | `443` | 下行 TLS 端口 |
 | `xhttp_download_servername` | 下行域名 | 下行证书名称；连接 IP 时必填 |
@@ -269,11 +334,17 @@ xhttp_alpn=h2 xhttp_finalmask=tls-fragment \
 
 ## 管理与更新
 
+REALITY 使用同名 `reality_*` 参数，例如 `reality_xmux`、`reality_finalmask`、`reality_padding_bytes`；默认模式为 `stream-one`，仅使用 H2。`reality_address` 默认为脚本探测的服务器地址，向导会要求明确填写。各节点的分片细节参数也用于该节点启用分片的下行方向。
+
 | 命令 | 作用 |
 | --- | --- |
 | `agsbx` / `agsbx menu` | 交互式管理菜单 |
 | `agsbx help` | 查看命令与参数示例 |
 | `agsbx setup` | 首次安装向导；可加 `--dry-run` 只预览 |
+| `agsbx xhttp` | 菜单 10 的 XHTTP 专区；首次安装可选双节点，已有安装选择节点调整增强项 |
+| `agsbx setup --stack both` | 直接进入双节点首次安装向导；也支持 `reality` / `argo` |
+| `agsbx tune --profile reality` | 交互调整 REALITY 的 XMUX、FinalMask、模式等；可加 `--dry-run` |
+| `agsbx tune --profile argo` | 交互调整 Argo 节点；包含可选下行分离 |
 | `agsbx status` | 查看进程、固定域名和当前方案，不显示凭据 |
 | `agsbx doctor` | 检查配置、进程和本机回源，不修改服务 |
 | `agsbx doctor --network` | 额外检查公网域名的 TCP/443 与 TLS 证书 |
@@ -391,6 +462,8 @@ python3 -m http.server 8000 --bind 127.0.0.1
 [自动测试](.github/workflows/test.yml)覆盖参数校验、固定隧道启动、凭据缺失、证书与 Token 文件权限、配置导出和生成器命令转义；使用真实 Xray 校验配置，并进行三种模式、H2 / H3、FinalMask 和上下行分离的本地加密传输测试。流式测试确认回源协商为 H2，并验证服务端先发送、持续交替收发数据，同时构建 Node 容器。
 
 管理命令还测试终端隐藏输入、无交互防误安装、升级前校验、模式切换与失败恢复、订阅去重、凭据脱敏；Linux CI 运行真实 Xray 的切换和重启检查。
+
+REALITY 同样校验三种传输模式、自定义 XMUX、填充与分片配置；使用本地目标站完成真实 REALITY 认证与 VLESS ENC 加密传输。Linux 测试还直接运行主脚本及 Node 入口的配置模板，检查双节点生成结果。
 
 这些检查保持 TLS 证书校验开启，**不等同于真实 Cloudflare 隧道、目标运营商网络或吞吐性能的验证**。部署后仍需使用自己的域名和客户端完成连接测试。
 

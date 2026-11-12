@@ -40,8 +40,9 @@ fs.chmod("start.sh", 0o777, (err) => {
 });
 
 const server = http.createServer((req, res) => {
-    if (req.url === `/${uuid}/xhttp.json`) {
-        const clientConfig = `${process.env.HOME}/agsbx/xhttp-client.json`;
+    if (req.url === `/${uuid}/xhttp.json` || req.url === `/${uuid}/xhttp-reality.json`) {
+        const filename = req.url === `/${uuid}/xhttp-reality.json` ? 'xhttp-reality-client.json' : 'xhttp-client.json';
+        const clientConfig = `${process.env.HOME}/agsbx/${filename}`;
         if (!fs.existsSync(clientConfig)) {
             res.writeHead(404);
             res.end('XHTTP configuration is not available');
